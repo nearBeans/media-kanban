@@ -133,6 +133,25 @@ body {
     margin: 8px 0 0 auto;
 }
 
+.recovery-code-panel > button {
+    width: 100%;
+}
+
+.recovery-email-confirmed-dialog {
+    width: min(calc(100% - 32px), 400px);
+}
+
+.recovery-email-confirmed-dialog p {
+    margin: 0 0 18px;
+    color: #fff;
+    font-size: 1.05rem;
+}
+
+.recovery-email-confirmed-dialog button {
+    display: block;
+    margin: 0 0 0 auto;
+}
+
 .account-bar {
     grid-column: 1 / -1;
     display: flex;

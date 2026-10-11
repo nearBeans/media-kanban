@@ -29,14 +29,6 @@
             </label>
             <button type="submit">復旧コードをメールで送信</button>
         </form>
-        <form id="recovery-form" hidden>
-            <h2>復旧コードを入力</h2>
-            <label>
-                メールで届いた復旧コード
-                <input name="recoveryCode" type="text" maxlength="40" autocomplete="one-time-code" autocapitalize="characters" spellcheck="false" required>
-            </label>
-            <button type="submit">復旧して新しいパスキーを登録</button>
-        </form>
         <form id="initial-registration">
             <h2>初回登録</h2>
             <label>
@@ -49,6 +41,19 @@
             </label>
             <button type="submit">パスキーを登録して開始</button>
         </form>
+    </main>
+    <main id="recovery-code-panel" class="auth-panel recovery-code-panel" hidden>
+        <h1>アカウント復旧</h1>
+        <p id="recovery-code-message" role="status" aria-live="polite"></p>
+        <form id="recovery-form">
+            <h2>復旧コードを入力</h2>
+            <label>
+                メールで届いた復旧コード
+                <input name="recoveryCode" type="text" maxlength="40" autocomplete="one-time-code" autocapitalize="characters" spellcheck="false" required>
+            </label>
+            <button type="submit">復旧して新しいパスキーを登録</button>
+        </form>
+        <button id="back-to-recovery-email" type="button">メールアドレス入力に戻る</button>
     </main>
     <header id="account-bar" class="account-bar" hidden>
         <span id="account-name"></span>
@@ -70,6 +75,10 @@
         <button id="confirm-recovery-email" type="button" hidden>メールアドレスを確認する</button>
         <p>確認済みのメールアドレスに、一度だけ使える復旧コードをメール送信します。コードは20分で期限切れになります。</p>
         <button id="close-recovery-dialog" type="button">閉じる</button>
+    </dialog>
+    <dialog id="recovery-email-confirmed-dialog" class="recovery-dialog recovery-email-confirmed-dialog">
+        <p id="recovery-email-confirmed-message"></p>
+        <button id="close-recovery-email-confirmed" type="button">閉じる</button>
     </dialog>
     <section class="yet" data-status="yet" hidden>
         <h1>未視聴・未読</h1>

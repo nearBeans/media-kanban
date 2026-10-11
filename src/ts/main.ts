@@ -4,8 +4,11 @@ const board = document.querySelector("body");
 const authPanel = document.querySelector<HTMLElement>("#auth-panel");
 const authMessage = document.querySelector<HTMLElement>("#auth-message");
 const registrationForm = document.querySelector<HTMLFormElement>("#initial-registration");
+const recoveryCodePanel = document.querySelector<HTMLElement>("#recovery-code-panel");
+const recoveryCodeMessage = document.querySelector<HTMLElement>("#recovery-code-message");
 const recoveryForm = document.querySelector<HTMLFormElement>("#recovery-form");
 const requestRecoveryCodeForm = document.querySelector<HTMLFormElement>("#request-recovery-code-form");
+const backToRecoveryEmailButton = document.querySelector<HTMLButtonElement>("#back-to-recovery-email");
 const loginButton = document.querySelector<HTMLButtonElement>("#passkey-login");
 const accountBar = document.querySelector<HTMLElement>("#account-bar");
 const accountName = document.querySelector<HTMLElement>("#account-name");
@@ -17,6 +20,9 @@ const recoveryEmailStatus = document.querySelector<HTMLElement>("#recovery-email
 const recoveryEmailForm = document.querySelector<HTMLFormElement>("#recovery-email-form");
 const confirmRecoveryEmailButton = document.querySelector<HTMLButtonElement>("#confirm-recovery-email");
 const closeRecoveryDialogButton = document.querySelector<HTMLButtonElement>("#close-recovery-dialog");
+const recoveryEmailConfirmedDialog = document.querySelector<HTMLDialogElement>("#recovery-email-confirmed-dialog");
+const recoveryEmailConfirmedMessage = document.querySelector<HTMLElement>("#recovery-email-confirmed-message");
+const closeRecoveryEmailConfirmedButton = document.querySelector<HTMLButtonElement>("#close-recovery-email-confirmed");
 const appMessage = document.querySelector<HTMLElement>("#app-message");
 let draggedCard: HTMLElement | null = null;
 let dropSection: HTMLElement | null = null;
@@ -37,19 +43,23 @@ interface CardsResponse {
     cards: CardData[];
 }
 
-if (!board || !authPanel || !authMessage || !registrationForm || !recoveryForm || !requestRecoveryCodeForm ||
-    !loginButton ||
+if (!board || !authPanel || !authMessage || !registrationForm || !recoveryCodePanel || !recoveryCodeMessage ||
+    !recoveryForm || !requestRecoveryCodeForm || !backToRecoveryEmailButton || !loginButton ||
     !accountBar || !accountName || !signOutButton || !manageRecoveryEmailButton || !recoveryDialog ||
     !recoveryDialogMessage || !recoveryEmailStatus || !recoveryEmailForm ||
-    !confirmRecoveryEmailButton || !closeRecoveryDialogButton || !appMessage) {
+    !confirmRecoveryEmailButton || !closeRecoveryDialogButton || !recoveryEmailConfirmedDialog ||
+    !recoveryEmailConfirmedMessage || !closeRecoveryEmailConfirmedButton || !appMessage) {
     throw new Error("The application is missing required page elements.");
 }
 const pageBoard = board;
 const loginPanel = authPanel;
 const liveAuthMessage = authMessage;
 const setupForm = registrationForm;
+const recoveryCodeScreen = recoveryCodePanel;
+const recoveryCodeStatus = recoveryCodeMessage;
 const accountRecoveryForm = recoveryForm;
 const requestRecoveryCode = requestRecoveryCodeForm;
+const backToEmailEntryButton = backToRecoveryEmailButton;
 const passkeyLogin = loginButton;
 const userBar = accountBar;
 const userName = accountName;
@@ -61,6 +71,9 @@ const recoveryEmailStatusMessage = recoveryEmailStatus;
 const manageRecoveryEmailForm = recoveryEmailForm;
 const verifyRecoveryEmailButton = confirmRecoveryEmailButton;
 const dismissRecoveryDialogButton = closeRecoveryDialogButton;
+const emailConfirmedDialog = recoveryEmailConfirmedDialog;
+const emailConfirmedMessage = recoveryEmailConfirmedMessage;
+const dismissEmailConfirmedButton = closeRecoveryEmailConfirmedButton;
 const appStatus = appMessage;
 let requestedRecoveryEmail = "";
 let pendingRecoveryEmailToken = new URL(location.href).searchParams.get("verify-recovery-email");
@@ -98,6 +111,7 @@ function setAppMessage(message: string): void {
 
 function showSignIn(message = ""): void {
     loginPanel.hidden = false;
+    recoveryCodeScreen.hidden = true;
     userBar.hidden = true;
     pageBoard.querySelectorAll<HTMLElement>("section[data-status]").forEach((section) => {
         section.hidden = true;
@@ -129,6 +143,7 @@ function createCard(id: string, title: string, tags: string[]): HTMLDivElement {
 async function loadBoard(): Promise<void> {
     const result = await requestJson<CardsResponse>("/api/cards");
     loginPanel.hidden = true;
+    recoveryCodeScreen.hidden = true;
     userBar.hidden = false;
     userName.textContent = result.user.name;
     setAppMessage("");
@@ -518,8 +533,10 @@ requestRecoveryCode.addEventListener("submit", async (event: SubmitEvent) => {
             body: JSON.stringify({ email }),
         });
         requestedRecoveryEmail = email.trim().toLowerCase();
-        accountRecoveryForm.hidden = false;
-        setAuthMessage(result.message);
+        loginPanel.hidden = true;
+        recoveryCodeScreen.hidden = false;
+        recoveryCodeStatus.textContent = result.message;
+        accountRecoveryForm.querySelector<HTMLInputElement>('input[name="recoveryCode"]')?.focus();
     } catch (error) {
         setAuthMessage(error instanceof Error ? error.message : "復旧コードを送信できませんでした。");
     } finally {
@@ -533,7 +550,7 @@ accountRecoveryForm.addEventListener("submit", async (event: SubmitEvent) => {
     event.preventDefault();
     const code = new FormData(accountRecoveryForm).get("recoveryCode");
     if (typeof code !== "string" || !requestedRecoveryEmail) {
-        setAuthMessage("復旧用メールアドレスでコードを受信してから入力してください。");
+        recoveryCodeStatus.textContent = "復旧用メールアドレスでコードを受信してから入力してください。";
         return;
     }
 
@@ -541,7 +558,7 @@ accountRecoveryForm.addEventListener("submit", async (event: SubmitEvent) => {
     if (submitButton) {
         submitButton.disabled = true;
     }
-    setAuthMessage("復旧コードを確認しています…");
+    recoveryCodeStatus.textContent = "復旧コードを確認しています…";
     try {
         const recovery = await requestJson<{ context: string }>("/api/recovery/start", {
             method: "POST",
@@ -562,12 +579,21 @@ accountRecoveryForm.addEventListener("submit", async (event: SubmitEvent) => {
         accountRecoveryForm.hidden = true;
         setAppMessage("アカウントを復旧しました。");
     } catch (error) {
-        setAuthMessage(error instanceof Error ? error.message : "アカウントを復旧できませんでした。");
+        recoveryCodeStatus.textContent = error instanceof Error
+            ? error.message
+            : "アカウントを復旧できませんでした。";
     } finally {
         if (submitButton) {
             submitButton.disabled = false;
         }
     }
+});
+
+backToEmailEntryButton.addEventListener("click", () => {
+    accountRecoveryForm.reset();
+    recoveryCodeScreen.hidden = true;
+    loginPanel.hidden = false;
+    setAuthMessage("");
 });
 
 openRecoveryDialogButton.addEventListener("click", async () => {
@@ -637,15 +663,16 @@ verifyRecoveryEmailButton.addEventListener("click", async () => {
     verifyRecoveryEmailButton.disabled = true;
     recoveryStatusMessage.textContent = "メールアドレスを確認しています…";
     try {
-        await requestJson<{ success: boolean }>("/api/recovery-email/verify", {
+        const result = await requestJson<{ success: boolean; email: string }>("/api/recovery-email/verify", {
             method: "POST",
             body: JSON.stringify({ token: pendingRecoveryEmailToken }),
         });
         pendingRecoveryEmailToken = null;
         verifyRecoveryEmailButton.hidden = true;
         manageRecoveryEmailForm.hidden = false;
-        recoveryEmailStatusMessage.textContent = "復旧用メールアドレスを確認しました。";
-        recoveryStatusMessage.textContent = "メールアドレスの確認が完了しました。";
+        recoveryCodeModal.close();
+        emailConfirmedMessage.textContent = `確認済み: ${result.email}`;
+        emailConfirmedDialog.showModal();
     } catch (error) {
         recoveryStatusMessage.textContent = error instanceof Error
             ? error.message
@@ -656,6 +683,7 @@ verifyRecoveryEmailButton.addEventListener("click", async () => {
 });
 
 dismissRecoveryDialogButton.addEventListener("click", () => recoveryCodeModal.close());
+dismissEmailConfirmedButton.addEventListener("click", () => emailConfirmedDialog.close());
 
 setupForm.addEventListener("submit", async (event: SubmitEvent) => {
     event.preventDefault();

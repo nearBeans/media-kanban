@@ -480,6 +480,14 @@ async function verifyRecoveryEmail(request: Request, env: Env): Promise<Response
         return json({ error: "確認リンクが無効か、期限切れです。" }, 400);
     }
     const tokenHash = await hashRegistrationToken(body.token);
+    const pending = await env.DB.prepare(
+        `SELECT pending_email AS email FROM recovery_emails
+         WHERE verification_token_hash = ? AND pending_email IS NOT NULL
+           AND verification_expires_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now')`,
+    ).bind(tokenHash).first<{ email: string }>();
+    if (!pending) {
+        return json({ error: "確認リンクが無効か、期限切れです。" }, 400);
+    }
     const result = await env.DB.prepare(
         `UPDATE recovery_emails
          SET email = pending_email, pending_email = NULL, verified_at = ?,
@@ -496,7 +504,7 @@ async function verifyRecoveryEmail(request: Request, env: Env): Promise<Response
     if (result.meta.changes !== 1) {
         return json({ error: "確認リンクが無効か、期限切れです。" }, 400);
     }
-    return json({ success: true });
+    return json({ success: true, email: pending.email });
 }
 
 const genericRecoveryEmailMessage =
