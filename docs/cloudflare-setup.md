@@ -15,6 +15,9 @@ npx wrangler secret put INITIAL_SETUP_CODE
 
 # Create a sending-only API key in Resend, restricted to the verified medikan.mofh.dev domain.
 npx wrangler secret put RESEND_API_KEY
+
+# Create a Laya API key and keep it server-side for optional CSV import suggestions.
+npx wrangler secret put LAYA_API_KEY
 ```
 
 Use a randomly generated `BETTER_AUTH_SECRET` of at least 32 characters. Choose a separate, high-entropy `INITIAL_SETUP_CODE`. Never commit or paste secret values into chat. `RESEND_FROM_EMAIL` is configured as the non-secret Worker variable `Media Kanban <recovery@medikan.mofh.dev>` in `wrangler.jsonc`; verify that sender domain in Resend before sending.
@@ -25,7 +28,10 @@ For local development, create an ignored `.dev.vars` file in the project root:
 BETTER_AUTH_SECRET=replace-with-a-random-secret-at-least-32-characters
 INITIAL_SETUP_CODE=replace-with-a-separate-random-code
 RESEND_API_KEY=replace-with-your-resend-api-key
+LAYA_API_KEY=replace-with-your-laya-api-key
 ```
+
+The Laya key is used only by the authenticated Worker proxy for explicit status/tag suggestions during CSV import. It is never sent to the browser. When requested, the proxy sends the full selected CSV row, including columns not mapped to Media Kanban fields, to Laya for each individual suggestion. CSV import/export remains usable without the key; if suggestions are unavailable, set the status and tags manually. Configure the key locally in the ignored `.dev.vars` file and in production with `npx wrangler secret put LAYA_API_KEY`.
 
 ## Database and deployment
 

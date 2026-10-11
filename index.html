@@ -70,9 +70,29 @@
     <header id="account-bar" class="account-bar" hidden>
         <span id="account-name"></span>
         <span id="app-message" role="status" aria-live="polite"></span>
+        <button id="show-kanban" type="button" aria-pressed="true">カンバン</button>
+        <button id="show-table" type="button" aria-pressed="false">表形式</button>
+        <button id="export-csv" type="button">CSVエクスポート</button>
+        <button id="open-import-csv" type="button">CSVインポート</button>
         <button id="manage-recovery-email" type="button">復旧設定</button>
         <button id="sign-out" type="button">ログアウト</button>
     </header>
+    <dialog id="csv-import-dialog" class="recovery-dialog csv-import-dialog">
+        <h2>CSVインポート</h2>
+        <p>ヘッダー付きCSVを選び、列を対応付けてください。最大1MB・100行までです。Laya候補を取得すると、未対応列も含む行全体が1行ずつLayaへ送信されます。</p>
+        <label>
+            CSVファイル
+            <input id="csv-file" type="file" accept=".csv,text/csv">
+        </label>
+        <div id="csv-column-mapping" class="csv-column-mapping" hidden></div>
+        <p id="csv-import-message" role="status" aria-live="polite">ファイルを選ぶと、列の対応付けとプレビューが表示されます。Laya候補は行ごと、または全行まとめて取得できます。</p>
+        <div class="csv-import-actions">
+            <button id="suggest-all-csv-rows" type="button" disabled>Layaで全行を個別解析</button>
+            <button id="submit-csv-import" type="button" disabled>確認した行をインポート</button>
+        </div>
+        <div id="csv-preview" class="csv-preview"></div>
+        <button id="close-csv-import" type="button">閉じる</button>
+    </dialog>
     <dialog id="recovery-dialog" class="recovery-dialog">
         <h2>アカウント復旧設定</h2>
         <p id="recovery-dialog-message" role="status" aria-live="polite"></p>
@@ -92,30 +112,74 @@
         <p id="recovery-email-confirmed-message"></p>
         <button id="close-recovery-email-confirmed" type="button">閉じる</button>
     </dialog>
-    <section class="yet" data-status="yet" hidden>
-        <h1>未視聴・未読</h1>
-        <div class="add-card-area">
-            <button class="add-card-trigger" type="button" aria-label="未視聴・未読にカードを追加" aria-expanded="false">+</button>
+    <p class="mobile-board-hint" hidden>列は左右にスワイプして切り替えられます</p>
+    <main class="kanban-board" aria-label="カンバンボード" hidden>
+        <section class="yet" data-status="yet" hidden>
+            <h1>未視聴・未読</h1>
+            <div class="add-card-area">
+                <button class="add-card-trigger" type="button" aria-label="未視聴・未読にカードを追加" aria-expanded="false">+</button>
+            </div>
+        </section>
+        <section class="now" data-status="now" hidden>
+            <h1>視聴中・読書中</h1>
+            <div class="add-card-area">
+                <button class="add-card-trigger" type="button" aria-label="視聴中・読書中にカードを追加" aria-expanded="false">+</button>
+            </div>
+        </section>
+        <section class="done" data-status="done" hidden>
+            <h1>完結・読了</h1>
+            <div class="add-card-area">
+                <button class="add-card-trigger" type="button" aria-label="完結・読了にカードを追加" aria-expanded="false">+</button>
+            </div>
+        </section>
+        <section class="stop" data-status="stop" hidden>
+            <h1>断念</h1>
+            <div class="add-card-area">
+                <button class="add-card-trigger" type="button" aria-label="断念にカードを追加" aria-expanded="false">+</button>
+            </div>
+        </section>
+    </main>
+    <main id="table-view" class="table-view" aria-label="カード一覧" hidden>
+        <h1>カード一覧</h1>
+        <div class="table-filters">
+            <label>
+                状態
+                <select id="table-status-filter">
+                    <option value="">すべて</option>
+                    <option value="yet">未視聴・未読</option>
+                    <option value="now">視聴中・読書中</option>
+                    <option value="done">完結・読了</option>
+                    <option value="stop">断念</option>
+                </select>
+            </label>
+            <label class="table-search">
+                タイトル検索
+                <input id="table-search" type="search" placeholder="タイトルを入力" autocomplete="off">
+            </label>
+            <fieldset id="table-tag-filters">
+                <legend>タグ（選択したタグを含むカード）</legend>
+                <label><input type="checkbox" name="filter-tag" value="マンガ">マンガ</label>
+                <label><input type="checkbox" name="filter-tag" value="アニメ">アニメ</label>
+                <label><input type="checkbox" name="filter-tag" value="ラノベ">ラノベ</label>
+                <label><input type="checkbox" name="filter-tag" value="ゲーム">ゲーム</label>
+            </fieldset>
+            <button id="clear-table-filters" type="button">絞り込みを解除</button>
+            <output id="table-result-count" aria-live="polite"></output>
         </div>
-    </section>
-    <section class="now" data-status="now" hidden>
-        <h1>視聴中・読書中</h1>
-        <div class="add-card-area">
-            <button class="add-card-trigger" type="button" aria-label="視聴中・読書中にカードを追加" aria-expanded="false">+</button>
+        <p class="table-scroll-hint">表は左右にスクロールできます</p>
+        <div class="table-scroll" role="region" aria-label="カード一覧表" tabindex="0">
+            <table>
+                <thead>
+                    <tr>
+                        <th scope="col">タイトル</th>
+                        <th scope="col">状態</th>
+                        <th scope="col">タグ</th>
+                    </tr>
+                </thead>
+                <tbody id="table-rows"></tbody>
+            </table>
         </div>
-    </section>
-    <section class="done" data-status="done" hidden>
-        <h1>完結・読了</h1>
-        <div class="add-card-area">
-            <button class="add-card-trigger" type="button" aria-label="完結・読了にカードを追加" aria-expanded="false">+</button>
-        </div>
-    </section>
-    <section class="stop" data-status="stop" hidden>
-        <h1>断念</h1>
-        <div class="add-card-area">
-            <button class="add-card-trigger" type="button" aria-label="諦めにカードを追加" aria-expanded="false">+</button>
-        </div>
-    </section>
+    </main>
     <script type="module" src="src/js/main.js"></script>
 </body>
 
