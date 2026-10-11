@@ -13,6 +13,82 @@ body {
     font-family: "Lexend" ,"Noto Sans JP", sans-serif;
 }
 
+[hidden] {
+    display: none !important;
+}
+
+.auth-panel {
+    grid-column: 1 / -1;
+    width: min(100%, 480px);
+    margin: 10vh auto 0;
+    padding: 24px;
+    color: #fff;
+}
+
+.auth-panel h1 {
+    margin-bottom: 10px;
+}
+
+.auth-panel p {
+    min-height: 1.5em;
+    margin-bottom: 12px;
+    color: #ffcf8b;
+}
+
+.auth-panel form {
+    display: grid;
+    gap: 12px;
+    margin-top: 28px;
+    padding-top: 20px;
+    border-top: 1px solid rgba(255, 255, 255, 0.18);
+}
+
+.auth-panel h2 {
+    font-size: 1.1rem;
+}
+
+.auth-panel label {
+    display: grid;
+    gap: 6px;
+    font-size: 0.9rem;
+}
+
+.auth-panel input,
+.auth-panel button,
+.account-bar button {
+    min-height: 42px;
+    padding: 8px 12px;
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    border-radius: 8px;
+    background: #252525;
+    color: #fff;
+    font: inherit;
+}
+
+.auth-panel button,
+.account-bar button {
+    cursor: pointer;
+}
+
+.auth-panel button:hover,
+.account-bar button:hover {
+    background: #486a32;
+}
+
+.account-bar {
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    min-width: 0;
+    color: #fff;
+}
+
+#app-message {
+    flex: 1;
+    color: #ffcf8b;
+}
+
 section {
     position: relative;
     background-color: #363636;

@@ -8,6 +8,7 @@
     // Environment Settings
     // See also https://aka.ms/tsconfig/module
     "module": "es2022",
+    "moduleResolution": "bundler",
     "target": "es2022",
     "types": [],
     // For nodejs:
@@ -34,11 +35,13 @@
 
     // Recommended Options
     "strict": true,
+    "noEmit": true,
     "jsx": "react-jsx",
     "verbatimModuleSyntax": true,
     "isolatedModules": true,
     "noUncheckedSideEffectImports": true,
     "moduleDetection": "force",
     "skipLibCheck": true,
-  }
+  },
+  "include": ["src/ts/main.ts", "src/ts/auth-client.ts"]
 }

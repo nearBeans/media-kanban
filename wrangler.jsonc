@@ -1,8 +1,19 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "media-kanban",
+  "main": "./src/ts/worker.ts",
   "compatibility_date": "2026-10-11",
+  "compatibility_flags": ["nodejs_compat"],
   "assets": {
-    "directory": "./dist"
-  }
+    "directory": "./dist",
+    "binding": "ASSETS"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "media-kanban-dev",
+      "database_id": "7ca7bb65-9909-42e9-8803-bcfbc4945407",
+      "migrations_dir": "./migrations"
+    }
+  ]
 }

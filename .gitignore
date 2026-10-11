@@ -1,5 +1,6 @@
 # Dependencies
 node_modules/
+.wrangler/
 
 # Compilation outputs
 dist/
@@ -9,6 +10,7 @@ build/
 # Environment variables
 .env
 .env.local
+.dev.vars
 
 # Logs
 logs/

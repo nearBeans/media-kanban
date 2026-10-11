@@ -1,13 +1,167 @@
+import { authClient } from "./auth-client";
+
 const board = document.querySelector("body");
+const authPanel = document.querySelector<HTMLElement>("#auth-panel");
+const authMessage = document.querySelector<HTMLElement>("#auth-message");
+const registrationForm = document.querySelector<HTMLFormElement>("#initial-registration");
+const loginButton = document.querySelector<HTMLButtonElement>("#passkey-login");
+const accountBar = document.querySelector<HTMLElement>("#account-bar");
+const accountName = document.querySelector<HTMLElement>("#account-name");
+const signOutButton = document.querySelector<HTMLButtonElement>("#sign-out");
+const appMessage = document.querySelector<HTMLElement>("#app-message");
 let draggedCard: HTMLElement | null = null;
 let dropSection: HTMLElement | null = null;
 let dropBefore: HTMLElement | null = null;
 let dropIndicator: HTMLElement | null = null;
 const tagOptions = ["マンガ", "アニメ", "ラノベ", "ゲーム"];
 let nextTagInputId = 0;
+type CardStatus = "yet" | "now" | "done" | "stop";
+interface CardData {
+    id: string;
+    title: string;
+    status: CardStatus;
+    position: number;
+    tags: string[];
+}
+interface CardsResponse {
+    user: { id: string; name: string };
+    cards: CardData[];
+}
 
-if (!board) {
-    throw new Error("Kanban board was not found.");
+if (!board || !authPanel || !authMessage || !registrationForm || !loginButton ||
+    !accountBar || !accountName || !signOutButton || !appMessage) {
+    throw new Error("The application is missing required page elements.");
+}
+const pageBoard = board;
+const loginPanel = authPanel;
+const liveAuthMessage = authMessage;
+const setupForm = registrationForm;
+const passkeyLogin = loginButton;
+const userBar = accountBar;
+const userName = accountName;
+const logOutButton = signOutButton;
+const appStatus = appMessage;
+
+async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
+    const response = await fetch(url, {
+        ...init,
+        credentials: "same-origin",
+        headers: {
+            ...(init?.body ? { "Content-Type": "application/json" } : {}),
+            ...init?.headers,
+        },
+    });
+    const data: unknown = await response.json().catch(() => null);
+    if (!response.ok) {
+        const message =
+            typeof data === "object" && data !== null && "error" in data && typeof data.error === "string"
+                ? data.error
+                : `Request failed (${response.status}).`;
+        throw new Error(message);
+    }
+    return data as T;
+}
+
+function setAuthMessage(message: string): void {
+    liveAuthMessage.textContent = message;
+}
+
+function setAppMessage(message: string): void {
+    appStatus.textContent = message;
+}
+
+function showSignIn(message = ""): void {
+    loginPanel.hidden = false;
+    userBar.hidden = true;
+    pageBoard.querySelectorAll<HTMLElement>("section[data-status]").forEach((section) => {
+        section.hidden = true;
+    });
+    setAuthMessage(message);
+}
+
+function createCard(id: string, title: string, tags: string[]): HTMLDivElement {
+    const card = document.createElement("div");
+    card.className = "card";
+    card.draggable = true;
+    card.dataset.cardId = id;
+
+    const heading = document.createElement("h2");
+    heading.className = "title";
+    heading.textContent = title;
+    card.append(heading);
+
+    for (const tag of tags) {
+        const tagElement = document.createElement("span");
+        tagElement.className = "tag";
+        tagElement.textContent = tag;
+        card.append(tagElement);
+    }
+
+    return card;
+}
+
+async function loadBoard(): Promise<void> {
+    const result = await requestJson<CardsResponse>("/api/cards");
+    loginPanel.hidden = true;
+    userBar.hidden = false;
+    userName.textContent = result.user.name;
+    setAppMessage("");
+
+    for (const status of ["yet", "now", "done", "stop"] as const) {
+        const section = pageBoard.querySelector<HTMLElement>(`section[data-status="${status}"]`);
+        if (!section) {
+            throw new Error(`The "${status}" column was not found.`);
+        }
+        section.hidden = false;
+        section.querySelectorAll(".card").forEach((card) => card.remove());
+        const addArea = section.querySelector<HTMLElement>(".add-card-area");
+        if (!addArea) {
+            throw new Error(`The add-card area for "${status}" was not found.`);
+        }
+        result.cards
+            .filter((card) => card.status === status)
+            .sort((left, right) => left.position - right.position)
+            .forEach((card) => section.insertBefore(createCard(card.id, card.title, card.tags), addArea));
+    }
+}
+
+async function checkAuthentication(): Promise<void> {
+    try {
+        await loadBoard();
+    } catch (error) {
+        if (error instanceof Error && error.message === "Authentication required.") {
+            try {
+                const setup = await requestJson<{ initialRegistrationAvailable: boolean }>("/api/setup-status");
+                setupForm.hidden = !setup.initialRegistrationAvailable;
+                showSignIn();
+            } catch (setupError) {
+                showSignIn(setupError instanceof Error ? setupError.message : "アプリの初期化を確認できません。");
+            }
+            return;
+        }
+        showSignIn(error instanceof Error ? error.message : "ボードを読み込めませんでした。");
+    }
+}
+
+async function saveCardOrder(): Promise<void> {
+    const cards: { id: string; status: CardStatus; position: number }[] = [];
+    for (const status of ["yet", "now", "done", "stop"] as const) {
+        const section = pageBoard.querySelector<HTMLElement>(`section[data-status="${status}"]`);
+        if (!section) {
+            throw new Error(`The "${status}" column was not found.`);
+        }
+        section.querySelectorAll<HTMLElement>(".card").forEach((card, position) => {
+            const id = card.dataset.cardId;
+            if (!id) {
+                throw new Error("A card is missing its database ID.");
+            }
+            cards.push({ id, status, position });
+        });
+    }
+    await requestJson<{ success: boolean }>("/api/cards/order", {
+        method: "PUT",
+        body: JSON.stringify({ cards }),
+    });
 }
 
 function createAddCardForm(): HTMLFormElement {
@@ -115,27 +269,7 @@ function closeAddCardForm(form: HTMLFormElement): void {
     }
 }
 
-function createCard(title: string, tags: string[]): HTMLDivElement {
-    const card = document.createElement("div");
-    card.className = "card";
-    card.draggable = true;
-
-    const heading = document.createElement("h2");
-    heading.className = "title";
-    heading.textContent = title;
-    card.append(heading);
-
-    for (const tag of tags) {
-        const tagElement = document.createElement("span");
-        tagElement.className = "tag";
-        tagElement.textContent = tag;
-        card.append(tagElement);
-    }
-
-    return card;
-}
-
-board.addEventListener("click", (event: MouseEvent) => {
+pageBoard.addEventListener("click", (event: MouseEvent) => {
     const target = event.target;
     if (!(target instanceof Element)) {
         return;
@@ -168,7 +302,7 @@ board.addEventListener("click", (event: MouseEvent) => {
     form.querySelector<HTMLInputElement>(".title-input")?.focus();
 });
 
-board.addEventListener("submit", (event: SubmitEvent) => {
+pageBoard.addEventListener("submit", async (event: SubmitEvent) => {
     const target = event.target;
     if (!(target instanceof HTMLFormElement) || !target.matches(".add-card-form")) {
         return;
@@ -201,11 +335,31 @@ board.addEventListener("submit", (event: SubmitEvent) => {
         return;
     }
     tagCheckboxes.forEach((checkbox) => checkbox.setCustomValidity(""));
-    section.insertBefore(createCard(title, tags), area);
-    closeAddCardForm(target);
+    const status = section.dataset.status;
+    if (status !== "yet" && status !== "now" && status !== "done" && status !== "stop") {
+        throw new Error("The card form is not inside a valid column.");
+    }
+    const submitButton = target.querySelector<HTMLButtonElement>(".submit-card");
+    if (submitButton) {
+        submitButton.disabled = true;
+    }
+    try {
+        const card = await requestJson<CardData>("/api/cards", {
+            method: "POST",
+            body: JSON.stringify({ title, tags, status }),
+        });
+        section.insertBefore(createCard(card.id, card.title, card.tags), area);
+        closeAddCardForm(target);
+    } catch (error) {
+        setAppMessage(error instanceof Error ? error.message : "カードを保存できませんでした。");
+    } finally {
+        if (submitButton) {
+            submitButton.disabled = false;
+        }
+    }
 });
 
-board.addEventListener("dragstart", (event: DragEvent) => {
+pageBoard.addEventListener("dragstart", (event: DragEvent) => {
     const target = event.target;
     if (!(target instanceof Element)) {
         return;
@@ -227,7 +381,7 @@ board.addEventListener("dragstart", (event: DragEvent) => {
     }
 });
 
-board.addEventListener("dragover", (event: DragEvent) => {
+pageBoard.addEventListener("dragover", (event: DragEvent) => {
     if (!draggedCard || !dropIndicator) {
         return;
     }
@@ -247,7 +401,7 @@ board.addEventListener("dragover", (event: DragEvent) => {
         event.dataTransfer.dropEffect = "move";
     }
 
-    board.querySelectorAll("section.is-drag-over").forEach((activeSection) => {
+    pageBoard.querySelectorAll("section.is-drag-over").forEach((activeSection) => {
         if (activeSection !== section) {
             activeSection.classList.remove("is-drag-over");
         }
@@ -274,7 +428,7 @@ board.addEventListener("dragover", (event: DragEvent) => {
     section.append(dropIndicator);
 });
 
-board.addEventListener("drop", (event: DragEvent) => {
+pageBoard.addEventListener("drop", (event: DragEvent) => {
     if (!draggedCard || !dropSection) {
         return;
     }
@@ -283,16 +437,93 @@ board.addEventListener("drop", (event: DragEvent) => {
     const addArea = dropSection.querySelector<HTMLElement>(".add-card-area");
     const insertionPoint = dropBefore?.parentElement === dropSection ? dropBefore : addArea;
     dropSection.insertBefore(draggedCard, insertionPoint ?? null);
+    void saveCardOrder().catch(async (error: unknown) => {
+        setAppMessage(error instanceof Error ? error.message : "カードの並び順を保存できませんでした。");
+        await loadBoard().catch((reloadError: unknown) => {
+            showSignIn(reloadError instanceof Error ? reloadError.message : "ボードを再読み込みできませんでした。");
+        });
+    });
 });
 
-board.addEventListener("dragend", () => {
+pageBoard.addEventListener("dragend", () => {
     draggedCard?.classList.remove("is-dragging");
     dropIndicator?.remove();
     draggedCard = null;
     dropSection = null;
     dropBefore = null;
     dropIndicator = null;
-    board.querySelectorAll("section.is-drag-over").forEach((section) => {
+    pageBoard.querySelectorAll("section.is-drag-over").forEach((section) => {
         section.classList.remove("is-drag-over");
     });
 });
+
+passkeyLogin.addEventListener("click", async () => {
+    passkeyLogin.disabled = true;
+    setAuthMessage("パスキーを確認しています…");
+    try {
+        const result = await authClient.signIn.passkey();
+        if (result.error) {
+            throw new Error(result.error.message || "パスキーでログインできませんでした。");
+        }
+        await loadBoard();
+    } catch (error) {
+        setAuthMessage(error instanceof Error ? error.message : "パスキーでログインできませんでした。");
+    } finally {
+        passkeyLogin.disabled = false;
+    }
+});
+
+setupForm.addEventListener("submit", async (event: SubmitEvent) => {
+    event.preventDefault();
+    const name = new FormData(setupForm).get("name");
+    const code = new FormData(setupForm).get("inviteCode");
+    if (typeof name !== "string" || typeof code !== "string") {
+        setAuthMessage("表示名と初回登録コードを入力してください。");
+        return;
+    }
+
+    const submitButton = setupForm.querySelector<HTMLButtonElement>('button[type="submit"]');
+    if (submitButton) {
+        submitButton.disabled = true;
+    }
+    setAuthMessage("パスキーを登録しています…");
+    try {
+        const registration = await requestJson<{ context: string }>("/api/registration/context", {
+            method: "POST",
+            body: JSON.stringify({ code, name }),
+        });
+        const result = await authClient.passkey.addPasskey({
+            name: `${name.trim()} のパスキー`,
+            context: registration.context,
+            createSession: true,
+        });
+        if (result.error) {
+            throw new Error(result.error.message || "パスキーを登録できませんでした。");
+        }
+        setupForm.reset();
+        await loadBoard();
+    } catch (error) {
+        setAuthMessage(error instanceof Error ? error.message : "パスキーを登録できませんでした。");
+    } finally {
+        if (submitButton) {
+            submitButton.disabled = false;
+        }
+    }
+});
+
+logOutButton.addEventListener("click", async () => {
+    logOutButton.disabled = true;
+    try {
+        const result = await authClient.signOut();
+        if (result.error) {
+            throw new Error(result.error.message || "ログアウトできませんでした。");
+        }
+        showSignIn("ログアウトしました。");
+    } catch (error) {
+        setAppMessage(error instanceof Error ? error.message : "ログアウトできませんでした。");
+    } finally {
+        logOutButton.disabled = false;
+    }
+});
+
+void checkAuthentication();

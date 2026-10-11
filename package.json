@@ -4,7 +4,10 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "build": "node node_modules/typescript/bin/tsc && node build.mjs",
+    "build": "node node_modules/typescript/bin/tsc --project tsconfig.json && node node_modules/typescript/bin/tsc --project tsconfig.worker.json && node build.mjs",
+    "db:migrate:local": "npx wrangler d1 migrations apply media-kanban-dev --local",
+    "db:migrate:remote": "npx wrangler d1 migrations apply media-kanban-dev --remote",
+    "dev": "npx wrangler dev",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
@@ -12,6 +15,12 @@
   "license": "ISC",
   "devDependencies": {
     "@types/node": "^26.6.5",
-    "typescript": "^7.0.2"
+    "typescript": "^7.0.2",
+    "wrangler": "^4.149.0"
+  },
+  "dependencies": {
+    "@better-auth/passkey": "^1.7.7",
+    "better-auth": "^1.7.7",
+    "esbuild": "^0.28.2"
   }
 }

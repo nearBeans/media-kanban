@@ -15,25 +15,47 @@
 </head>
 
 <body>
-    <section class="yet">
+    <main id="auth-panel" class="auth-panel">
+        <h1>Media Kanban</h1>
+        <p id="auth-message" role="status" aria-live="polite"></p>
+        <button id="passkey-login" type="button">パスキーでログイン</button>
+        <form id="initial-registration">
+            <h2>初回登録</h2>
+            <label>
+                表示名
+                <input name="name" type="text" maxlength="60" autocomplete="nickname" required>
+            </label>
+            <label>
+                初回登録コード
+                <input name="inviteCode" type="password" autocomplete="off" required>
+            </label>
+            <button type="submit">パスキーを登録して開始</button>
+        </form>
+    </main>
+    <header id="account-bar" class="account-bar" hidden>
+        <span id="account-name"></span>
+        <span id="app-message" role="status" aria-live="polite"></span>
+        <button id="sign-out" type="button">ログアウト</button>
+    </header>
+    <section class="yet" data-status="yet" hidden>
         <h1>未視聴・未読</h1>
         <div class="add-card-area">
             <button class="add-card-trigger" type="button" aria-label="未視聴・未読にカードを追加" aria-expanded="false">+</button>
         </div>
     </section>
-    <section class="now">
+    <section class="now" data-status="now" hidden>
         <h1>視聴中・読書中</h1>
         <div class="add-card-area">
             <button class="add-card-trigger" type="button" aria-label="視聴中・読書中にカードを追加" aria-expanded="false">+</button>
         </div>
     </section>
-    <section class="done">
+    <section class="done" data-status="done" hidden>
         <h1>完結・読了</h1>
         <div class="add-card-area">
             <button class="add-card-trigger" type="button" aria-label="完結・読了にカードを追加" aria-expanded="false">+</button>
         </div>
     </section>
-    <section class="stop">
+    <section class="stop" data-status="stop" hidden>
         <h1>諦め</h1>
         <div class="add-card-area">
             <button class="add-card-trigger" type="button" aria-label="諦めにカードを追加" aria-expanded="false">+</button>
