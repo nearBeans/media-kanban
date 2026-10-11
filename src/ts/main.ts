@@ -3,12 +3,16 @@ import { authClient } from "./auth-client";
 const board = document.querySelector("body");
 const authPanel = document.querySelector<HTMLElement>("#auth-panel");
 const authMessage = document.querySelector<HTMLElement>("#auth-message");
+const recoveryRequestPanel = document.querySelector<HTMLElement>("#recovery-request-panel");
+const recoveryRequestMessage = document.querySelector<HTMLElement>("#recovery-request-message");
+const signupPanel = document.querySelector<HTMLElement>("#signup-panel");
+const signupMessage = document.querySelector<HTMLElement>("#signup-message");
+const signupLink = document.querySelector<HTMLAnchorElement>("#signup-link");
 const registrationForm = document.querySelector<HTMLFormElement>("#initial-registration");
 const recoveryCodePanel = document.querySelector<HTMLElement>("#recovery-code-panel");
 const recoveryCodeMessage = document.querySelector<HTMLElement>("#recovery-code-message");
 const recoveryForm = document.querySelector<HTMLFormElement>("#recovery-form");
 const requestRecoveryCodeForm = document.querySelector<HTMLFormElement>("#request-recovery-code-form");
-const backToRecoveryEmailButton = document.querySelector<HTMLButtonElement>("#back-to-recovery-email");
 const loginButton = document.querySelector<HTMLButtonElement>("#passkey-login");
 const accountBar = document.querySelector<HTMLElement>("#account-bar");
 const accountName = document.querySelector<HTMLElement>("#account-name");
@@ -43,8 +47,9 @@ interface CardsResponse {
     cards: CardData[];
 }
 
-if (!board || !authPanel || !authMessage || !registrationForm || !recoveryCodePanel || !recoveryCodeMessage ||
-    !recoveryForm || !requestRecoveryCodeForm || !backToRecoveryEmailButton || !loginButton ||
+if (!board || !authPanel || !authMessage || !recoveryRequestPanel || !recoveryRequestMessage ||
+    !signupPanel || !signupMessage || !signupLink || !registrationForm || !recoveryCodePanel ||
+    !recoveryCodeMessage || !recoveryForm || !requestRecoveryCodeForm || !loginButton ||
     !accountBar || !accountName || !signOutButton || !manageRecoveryEmailButton || !recoveryDialog ||
     !recoveryDialogMessage || !recoveryEmailStatus || !recoveryEmailForm ||
     !confirmRecoveryEmailButton || !closeRecoveryDialogButton || !recoveryEmailConfirmedDialog ||
@@ -54,12 +59,15 @@ if (!board || !authPanel || !authMessage || !registrationForm || !recoveryCodePa
 const pageBoard = board;
 const loginPanel = authPanel;
 const liveAuthMessage = authMessage;
+const recoveryEntryPanel = recoveryRequestPanel;
+const recoveryEntryMessage = recoveryRequestMessage;
+const newAccountPanel = signupPanel;
+const newAccountMessage = signupMessage;
 const setupForm = registrationForm;
 const recoveryCodeScreen = recoveryCodePanel;
 const recoveryCodeStatus = recoveryCodeMessage;
 const accountRecoveryForm = recoveryForm;
 const requestRecoveryCode = requestRecoveryCodeForm;
-const backToEmailEntryButton = backToRecoveryEmailButton;
 const passkeyLogin = loginButton;
 const userBar = accountBar;
 const userName = accountName;
@@ -109,9 +117,38 @@ function setAppMessage(message: string): void {
     appStatus.textContent = message;
 }
 
+type AuthPage = "login" | "recovery" | "signup" | "recovery-code";
+
+function showAuthPage(page: AuthPage): void {
+    loginPanel.hidden = page !== "login";
+    recoveryEntryPanel.hidden = page !== "recovery";
+    newAccountPanel.hidden = page !== "signup";
+    recoveryCodeScreen.hidden = page !== "recovery-code";
+}
+
+function authPageFromHash(): AuthPage {
+    switch (location.hash) {
+        case "#recovery":
+            return "recovery";
+        case "#signup":
+            return "signup";
+        case "#recovery-code":
+            return "recovery-code";
+        default:
+            return "login";
+    }
+}
+
+function navigateAuthPage(page: AuthPage): void {
+    const hash = page === "login" ? "" : `#${page}`;
+    if (location.hash !== hash) {
+        history.pushState(null, "", `${location.pathname}${location.search}${hash}`);
+    }
+    showAuthPage(page);
+}
+
 function showSignIn(message = ""): void {
-    loginPanel.hidden = false;
-    recoveryCodeScreen.hidden = true;
+    showAuthPage(authPageFromHash());
     userBar.hidden = true;
     pageBoard.querySelectorAll<HTMLElement>("section[data-status]").forEach((section) => {
         section.hidden = true;
@@ -143,6 +180,8 @@ function createCard(id: string, title: string, tags: string[]): HTMLDivElement {
 async function loadBoard(): Promise<void> {
     const result = await requestJson<CardsResponse>("/api/cards");
     loginPanel.hidden = true;
+    recoveryEntryPanel.hidden = true;
+    newAccountPanel.hidden = true;
     recoveryCodeScreen.hidden = true;
     userBar.hidden = false;
     userName.textContent = result.user.name;
@@ -174,6 +213,9 @@ async function checkAuthentication(): Promise<void> {
             try {
                 const setup = await requestJson<{ initialRegistrationAvailable: boolean }>("/api/setup-status");
                 setupForm.hidden = !setup.initialRegistrationAvailable;
+                newAccountMessage.textContent = setup.initialRegistrationAvailable
+                    ? ""
+                    : "新しいアカウントの登録は現在受け付けていません。";
                 showSignIn();
             } catch (setupError) {
                 showSignIn(setupError instanceof Error ? setupError.message : "アプリの初期化を確認できません。");
@@ -514,11 +556,32 @@ passkeyLogin.addEventListener("click", async () => {
     }
 });
 
+document.addEventListener("click", (event: MouseEvent) => {
+    const target = event.target;
+    if (!(target instanceof Element)) {
+        return;
+    }
+    const link = target.closest<HTMLAnchorElement>('a[href^="#"]');
+    if (!link) {
+        return;
+    }
+    const page = link.hash.slice(1);
+    if (page !== "login" && page !== "recovery" && page !== "signup" && page !== "recovery-code") {
+        return;
+    }
+    event.preventDefault();
+    navigateAuthPage(page);
+});
+
+window.addEventListener("popstate", () => {
+    showAuthPage(authPageFromHash());
+});
+
 requestRecoveryCode.addEventListener("submit", async (event: SubmitEvent) => {
     event.preventDefault();
     const email = new FormData(requestRecoveryCode).get("email");
     if (typeof email !== "string") {
-        setAuthMessage("復旧用メールアドレスを入力してください。");
+        recoveryEntryMessage.textContent = "復旧用メールアドレスを入力してください。";
         return;
     }
 
@@ -526,19 +589,20 @@ requestRecoveryCode.addEventListener("submit", async (event: SubmitEvent) => {
     if (submitButton) {
         submitButton.disabled = true;
     }
-    setAuthMessage("復旧コードをメールで送信しています…");
+    recoveryEntryMessage.textContent = "復旧コードをメールで送信しています…";
     try {
         const result = await requestJson<{ message: string }>("/api/recovery/email-code", {
             method: "POST",
             body: JSON.stringify({ email }),
         });
         requestedRecoveryEmail = email.trim().toLowerCase();
-        loginPanel.hidden = true;
-        recoveryCodeScreen.hidden = false;
+        navigateAuthPage("recovery-code");
         recoveryCodeStatus.textContent = result.message;
         accountRecoveryForm.querySelector<HTMLInputElement>('input[name="recoveryCode"]')?.focus();
     } catch (error) {
-        setAuthMessage(error instanceof Error ? error.message : "復旧コードを送信できませんでした。");
+        recoveryEntryMessage.textContent = error instanceof Error
+            ? error.message
+            : "復旧コードを送信できませんでした。";
     } finally {
         if (submitButton) {
             submitButton.disabled = false;
@@ -587,13 +651,6 @@ accountRecoveryForm.addEventListener("submit", async (event: SubmitEvent) => {
             submitButton.disabled = false;
         }
     }
-});
-
-backToEmailEntryButton.addEventListener("click", () => {
-    accountRecoveryForm.reset();
-    recoveryCodeScreen.hidden = true;
-    loginPanel.hidden = false;
-    setAuthMessage("");
 });
 
 openRecoveryDialogButton.addEventListener("click", async () => {
@@ -690,7 +747,7 @@ setupForm.addEventListener("submit", async (event: SubmitEvent) => {
     const name = new FormData(setupForm).get("name");
     const code = new FormData(setupForm).get("inviteCode");
     if (typeof name !== "string" || typeof code !== "string") {
-        setAuthMessage("表示名と初回登録コードを入力してください。");
+        newAccountMessage.textContent = "表示名と初回登録コードを入力してください。";
         return;
     }
 
@@ -698,7 +755,7 @@ setupForm.addEventListener("submit", async (event: SubmitEvent) => {
     if (submitButton) {
         submitButton.disabled = true;
     }
-    setAuthMessage("パスキーを登録しています…");
+    newAccountMessage.textContent = "パスキーを登録しています…";
     try {
         const registration = await requestJson<{ context: string }>("/api/registration/context", {
             method: "POST",
@@ -715,7 +772,9 @@ setupForm.addEventListener("submit", async (event: SubmitEvent) => {
         setupForm.reset();
         await loadBoard();
     } catch (error) {
-        setAuthMessage(error instanceof Error ? error.message : "パスキーを登録できませんでした。");
+        newAccountMessage.textContent = error instanceof Error
+            ? error.message
+            : "パスキーを登録できませんでした。";
     } finally {
         if (submitButton) {
             submitButton.disabled = false;
@@ -739,6 +798,7 @@ logOutButton.addEventListener("click", async () => {
 });
 
 void checkAuthentication();
+showAuthPage(authPageFromHash());
 if (pendingRecoveryEmailToken) {
     recoveryEmailStatusMessage.textContent = "メール内のリンクを開きました。確認を完了してください。";
     recoveryStatusMessage.textContent = "";

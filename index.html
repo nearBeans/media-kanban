@@ -20,8 +20,15 @@
         <h1>Media Kanban</h1>
         <p id="auth-message" role="status" aria-live="polite"></p>
         <button id="passkey-login" type="button">パスキーでログイン</button>
+        <nav class="auth-links" aria-label="アカウント操作">
+            <a href="#recovery">パスキーを紛失した場合</a>
+            <a id="signup-link" href="#signup">アカウントの新規作成</a>
+        </nav>
+    </main>
+    <main id="recovery-request-panel" class="auth-panel" hidden>
+        <h1>アカウント復旧</h1>
+        <p id="recovery-request-message" role="status" aria-live="polite"></p>
         <form id="request-recovery-code-form">
-            <h2>アカウント復旧</h2>
             <p>登録済みの復旧用メールアドレスへ、一度だけ使えるコードを送信します。</p>
             <label>
                 復旧用メールアドレス
@@ -29,8 +36,12 @@
             </label>
             <button type="submit">復旧コードをメールで送信</button>
         </form>
-        <form id="initial-registration">
-            <h2>初回登録</h2>
+        <a href="#login">ログインに戻る</a>
+    </main>
+    <main id="signup-panel" class="auth-panel" hidden>
+        <h1>アカウントの新規作成</h1>
+        <p id="signup-message" role="status" aria-live="polite"></p>
+        <form id="initial-registration" hidden>
             <label>
                 表示名
                 <input name="name" type="text" maxlength="60" autocomplete="nickname" required>
@@ -41,6 +52,7 @@
             </label>
             <button type="submit">パスキーを登録して開始</button>
         </form>
+        <a href="#login">ログインに戻る</a>
     </main>
     <main id="recovery-code-panel" class="auth-panel recovery-code-panel" hidden>
         <h1>アカウント復旧</h1>
@@ -53,7 +65,7 @@
             </label>
             <button type="submit">復旧して新しいパスキーを登録</button>
         </form>
-        <button id="back-to-recovery-email" type="button">メールアドレス入力に戻る</button>
+        <a href="#recovery">メールアドレス入力に戻る</a>
     </main>
     <header id="account-bar" class="account-bar" hidden>
         <span id="account-name"></span>

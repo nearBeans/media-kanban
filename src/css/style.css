@@ -82,6 +82,36 @@ body {
     background: #486a32;
 }
 
+.auth-panel > a,
+.auth-links a {
+    display: block;
+    color: #b7d99c;
+    text-align: center;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+}
+
+.auth-panel > a {
+    margin-top: 20px;
+}
+
+.auth-links {
+    display: grid;
+    gap: 16px;
+    margin-top: 24px;
+}
+
+.auth-panel > a:hover,
+.auth-links a:hover {
+    color: #d5f2bd;
+}
+
+.auth-panel #passkey-login {
+    width: 100%;
+    min-height: 50px;
+    font-size: 1.05rem;
+}
+
 .recovery-dialog {
     width: min(calc(100% - 32px), 520px);
     max-height: min(85vh, 720px);
