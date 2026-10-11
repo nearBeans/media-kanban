@@ -4,6 +4,9 @@
   "main": "./src/ts/worker.ts",
   "compatibility_date": "2026-10-11",
   "compatibility_flags": ["nodejs_compat"],
+  "vars": {
+    "RESEND_FROM_EMAIL": "Media Kanban <recovery@medikan.mofh.dev>"
+  },
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS"

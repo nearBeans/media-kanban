@@ -4,6 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="referrer" content="no-referrer">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link
@@ -19,6 +20,23 @@
         <h1>Media Kanban</h1>
         <p id="auth-message" role="status" aria-live="polite"></p>
         <button id="passkey-login" type="button">パスキーでログイン</button>
+        <form id="request-recovery-code-form">
+            <h2>アカウント復旧</h2>
+            <p>登録済みの復旧用メールアドレスへ、一度だけ使えるコードを送信します。</p>
+            <label>
+                復旧用メールアドレス
+                <input name="email" type="email" maxlength="254" autocomplete="email" required>
+            </label>
+            <button type="submit">復旧コードをメールで送信</button>
+        </form>
+        <form id="recovery-form" hidden>
+            <h2>復旧コードを入力</h2>
+            <label>
+                メールで届いた復旧コード
+                <input name="recoveryCode" type="text" maxlength="40" autocomplete="one-time-code" autocapitalize="characters" spellcheck="false" required>
+            </label>
+            <button type="submit">復旧して新しいパスキーを登録</button>
+        </form>
         <form id="initial-registration">
             <h2>初回登録</h2>
             <label>
@@ -35,8 +53,24 @@
     <header id="account-bar" class="account-bar" hidden>
         <span id="account-name"></span>
         <span id="app-message" role="status" aria-live="polite"></span>
+        <button id="manage-recovery-email" type="button">復旧設定</button>
         <button id="sign-out" type="button">ログアウト</button>
     </header>
+    <dialog id="recovery-dialog" class="recovery-dialog">
+        <h2>アカウント復旧設定</h2>
+        <p id="recovery-dialog-message" role="status" aria-live="polite"></p>
+        <p id="recovery-email-status"></p>
+        <form id="recovery-email-form">
+            <label>
+                復旧用メールアドレス
+                <input name="email" type="email" maxlength="254" autocomplete="email" required>
+            </label>
+            <button type="submit">確認メールを送信／再送</button>
+        </form>
+        <button id="confirm-recovery-email" type="button" hidden>メールアドレスを確認する</button>
+        <p>確認済みのメールアドレスに、一度だけ使える復旧コードをメール送信します。コードは20分で期限切れになります。</p>
+        <button id="close-recovery-dialog" type="button">閉じる</button>
+    </dialog>
     <section class="yet" data-status="yet" hidden>
         <h1>未視聴・未読</h1>
         <div class="add-card-area">

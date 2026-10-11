@@ -43,6 +43,10 @@ body {
     border-top: 1px solid rgba(255, 255, 255, 0.18);
 }
 
+.auth-panel form p {
+    margin: 0;
+}
+
 .auth-panel h2 {
     font-size: 1.1rem;
 }
@@ -55,7 +59,8 @@ body {
 
 .auth-panel input,
 .auth-panel button,
-.account-bar button {
+.account-bar button,
+.recovery-dialog button {
     min-height: 42px;
     padding: 8px 12px;
     border: 1px solid rgba(255, 255, 255, 0.25);
@@ -66,13 +71,66 @@ body {
 }
 
 .auth-panel button,
-.account-bar button {
+.account-bar button,
+.recovery-dialog button {
     cursor: pointer;
 }
 
 .auth-panel button:hover,
-.account-bar button:hover {
+.account-bar button:hover,
+.recovery-dialog button:hover {
     background: #486a32;
+}
+
+.recovery-dialog {
+    width: min(calc(100% - 32px), 520px);
+    max-height: min(85vh, 720px);
+    margin: auto;
+    padding: 24px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 14px;
+    background: #252525;
+    color: #fff;
+}
+
+.recovery-dialog::backdrop {
+    background: rgba(0, 0, 0, 0.72);
+}
+
+.recovery-dialog h2,
+.recovery-dialog p,
+.recovery-dialog button {
+    margin-bottom: 14px;
+}
+
+.recovery-dialog form {
+    display: grid;
+    gap: 12px;
+    margin: 18px 0;
+}
+
+.recovery-dialog label {
+    display: grid;
+    gap: 6px;
+}
+
+.recovery-dialog input {
+    min-height: 42px;
+    padding: 8px 12px;
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    border-radius: 8px;
+    background: #1d1d1d;
+    color: #fff;
+    font: inherit;
+}
+
+.recovery-dialog p {
+    line-height: 1.5;
+}
+
+.recovery-dialog #close-recovery-dialog {
+    display: block;
+    margin: 8px 0 0 auto;
 }
 
 .account-bar {

@@ -4,10 +4,19 @@ const board = document.querySelector("body");
 const authPanel = document.querySelector<HTMLElement>("#auth-panel");
 const authMessage = document.querySelector<HTMLElement>("#auth-message");
 const registrationForm = document.querySelector<HTMLFormElement>("#initial-registration");
+const recoveryForm = document.querySelector<HTMLFormElement>("#recovery-form");
+const requestRecoveryCodeForm = document.querySelector<HTMLFormElement>("#request-recovery-code-form");
 const loginButton = document.querySelector<HTMLButtonElement>("#passkey-login");
 const accountBar = document.querySelector<HTMLElement>("#account-bar");
 const accountName = document.querySelector<HTMLElement>("#account-name");
 const signOutButton = document.querySelector<HTMLButtonElement>("#sign-out");
+const manageRecoveryEmailButton = document.querySelector<HTMLButtonElement>("#manage-recovery-email");
+const recoveryDialog = document.querySelector<HTMLDialogElement>("#recovery-dialog");
+const recoveryDialogMessage = document.querySelector<HTMLElement>("#recovery-dialog-message");
+const recoveryEmailStatus = document.querySelector<HTMLElement>("#recovery-email-status");
+const recoveryEmailForm = document.querySelector<HTMLFormElement>("#recovery-email-form");
+const confirmRecoveryEmailButton = document.querySelector<HTMLButtonElement>("#confirm-recovery-email");
+const closeRecoveryDialogButton = document.querySelector<HTMLButtonElement>("#close-recovery-dialog");
 const appMessage = document.querySelector<HTMLElement>("#app-message");
 let draggedCard: HTMLElement | null = null;
 let dropSection: HTMLElement | null = null;
@@ -28,19 +37,36 @@ interface CardsResponse {
     cards: CardData[];
 }
 
-if (!board || !authPanel || !authMessage || !registrationForm || !loginButton ||
-    !accountBar || !accountName || !signOutButton || !appMessage) {
+if (!board || !authPanel || !authMessage || !registrationForm || !recoveryForm || !requestRecoveryCodeForm ||
+    !loginButton ||
+    !accountBar || !accountName || !signOutButton || !manageRecoveryEmailButton || !recoveryDialog ||
+    !recoveryDialogMessage || !recoveryEmailStatus || !recoveryEmailForm ||
+    !confirmRecoveryEmailButton || !closeRecoveryDialogButton || !appMessage) {
     throw new Error("The application is missing required page elements.");
 }
 const pageBoard = board;
 const loginPanel = authPanel;
 const liveAuthMessage = authMessage;
 const setupForm = registrationForm;
+const accountRecoveryForm = recoveryForm;
+const requestRecoveryCode = requestRecoveryCodeForm;
 const passkeyLogin = loginButton;
 const userBar = accountBar;
 const userName = accountName;
 const logOutButton = signOutButton;
+const openRecoveryDialogButton = manageRecoveryEmailButton;
+const recoveryCodeModal = recoveryDialog;
+const recoveryStatusMessage = recoveryDialogMessage;
+const recoveryEmailStatusMessage = recoveryEmailStatus;
+const manageRecoveryEmailForm = recoveryEmailForm;
+const verifyRecoveryEmailButton = confirmRecoveryEmailButton;
+const dismissRecoveryDialogButton = closeRecoveryDialogButton;
 const appStatus = appMessage;
+let requestedRecoveryEmail = "";
+let pendingRecoveryEmailToken = new URL(location.href).searchParams.get("verify-recovery-email");
+if (pendingRecoveryEmailToken) {
+    history.replaceState(null, "", location.pathname);
+}
 
 async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
     const response = await fetch(url, {
@@ -473,6 +499,164 @@ passkeyLogin.addEventListener("click", async () => {
     }
 });
 
+requestRecoveryCode.addEventListener("submit", async (event: SubmitEvent) => {
+    event.preventDefault();
+    const email = new FormData(requestRecoveryCode).get("email");
+    if (typeof email !== "string") {
+        setAuthMessage("復旧用メールアドレスを入力してください。");
+        return;
+    }
+
+    const submitButton = requestRecoveryCode.querySelector<HTMLButtonElement>('button[type="submit"]');
+    if (submitButton) {
+        submitButton.disabled = true;
+    }
+    setAuthMessage("復旧コードをメールで送信しています…");
+    try {
+        const result = await requestJson<{ message: string }>("/api/recovery/email-code", {
+            method: "POST",
+            body: JSON.stringify({ email }),
+        });
+        requestedRecoveryEmail = email.trim().toLowerCase();
+        accountRecoveryForm.hidden = false;
+        setAuthMessage(result.message);
+    } catch (error) {
+        setAuthMessage(error instanceof Error ? error.message : "復旧コードを送信できませんでした。");
+    } finally {
+        if (submitButton) {
+            submitButton.disabled = false;
+        }
+    }
+});
+
+accountRecoveryForm.addEventListener("submit", async (event: SubmitEvent) => {
+    event.preventDefault();
+    const code = new FormData(accountRecoveryForm).get("recoveryCode");
+    if (typeof code !== "string" || !requestedRecoveryEmail) {
+        setAuthMessage("復旧用メールアドレスでコードを受信してから入力してください。");
+        return;
+    }
+
+    const submitButton = accountRecoveryForm.querySelector<HTMLButtonElement>('button[type="submit"]');
+    if (submitButton) {
+        submitButton.disabled = true;
+    }
+    setAuthMessage("復旧コードを確認しています…");
+    try {
+        const recovery = await requestJson<{ context: string }>("/api/recovery/start", {
+            method: "POST",
+            body: JSON.stringify({ email: requestedRecoveryEmail, code }),
+        });
+        const result = await authClient.passkey.addPasskey({
+            name: "復旧後のパスキー",
+            context: recovery.context,
+            createSession: true,
+        });
+        if (result.error) {
+            throw new Error(result.error.message || "復旧用パスキーを登録できませんでした。");
+        }
+        accountRecoveryForm.reset();
+        await loadBoard();
+        requestedRecoveryEmail = "";
+        requestRecoveryCode.reset();
+        accountRecoveryForm.hidden = true;
+        setAppMessage("アカウントを復旧しました。");
+    } catch (error) {
+        setAuthMessage(error instanceof Error ? error.message : "アカウントを復旧できませんでした。");
+    } finally {
+        if (submitButton) {
+            submitButton.disabled = false;
+        }
+    }
+});
+
+openRecoveryDialogButton.addEventListener("click", async () => {
+    recoveryStatusMessage.textContent = "復旧コードの状態を確認しています…";
+    recoveryEmailStatusMessage.textContent = "";
+    verifyRecoveryEmailButton.hidden = true;
+    recoveryCodeModal.showModal();
+    try {
+        const status = await requestJson<{
+            email: string | null;
+            pendingEmail: string | null;
+            verified: boolean;
+        }>("/api/recovery-email");
+        const emailInput = manageRecoveryEmailForm.querySelector<HTMLInputElement>('input[name="email"]');
+        if (!emailInput) {
+            throw new Error("復旧用メールアドレスの入力欄がありません。");
+        }
+        emailInput.value = status.pendingEmail ?? status.email ?? "";
+        recoveryEmailStatusMessage.textContent = status.verified
+            ? `確認済み: ${status.email}`
+            : status.pendingEmail
+                ? `確認待ち: ${status.pendingEmail}`
+                : "復旧用メールアドレスは未登録です。";
+        recoveryStatusMessage.textContent = "";
+    } catch (error) {
+        recoveryStatusMessage.textContent = error instanceof Error
+            ? error.message
+            : "復旧用メールアドレスの状態を確認できませんでした。";
+    }
+});
+
+manageRecoveryEmailForm.addEventListener("submit", async (event: SubmitEvent) => {
+    event.preventDefault();
+    const email = new FormData(manageRecoveryEmailForm).get("email");
+    if (typeof email !== "string") {
+        recoveryStatusMessage.textContent = "復旧用メールアドレスを入力してください。";
+        return;
+    }
+    const submitButton = manageRecoveryEmailForm.querySelector<HTMLButtonElement>('button[type="submit"]');
+    if (submitButton) {
+        submitButton.disabled = true;
+    }
+    recoveryStatusMessage.textContent = "確認メールを送信しています…";
+    try {
+        const result = await requestJson<{ message: string }>("/api/recovery-email", {
+            method: "POST",
+            body: JSON.stringify({ email }),
+        });
+        recoveryStatusMessage.textContent = result.message;
+        recoveryEmailStatusMessage.textContent = `確認待ち: ${email.trim()}`;
+    } catch (error) {
+        recoveryStatusMessage.textContent = error instanceof Error
+            ? error.message
+            : "確認メールを送信できませんでした。";
+    } finally {
+        if (submitButton) {
+            submitButton.disabled = false;
+        }
+    }
+});
+
+verifyRecoveryEmailButton.addEventListener("click", async () => {
+    if (!pendingRecoveryEmailToken) {
+        recoveryStatusMessage.textContent = "確認リンクが無効か、期限切れです。";
+        return;
+    }
+    verifyRecoveryEmailButton.disabled = true;
+    recoveryStatusMessage.textContent = "メールアドレスを確認しています…";
+    try {
+        await requestJson<{ success: boolean }>("/api/recovery-email/verify", {
+            method: "POST",
+            body: JSON.stringify({ token: pendingRecoveryEmailToken }),
+        });
+        pendingRecoveryEmailToken = null;
+        verifyRecoveryEmailButton.hidden = true;
+        manageRecoveryEmailForm.hidden = false;
+        recoveryEmailStatusMessage.textContent = "復旧用メールアドレスを確認しました。";
+        recoveryStatusMessage.textContent = "メールアドレスの確認が完了しました。";
+    } catch (error) {
+        recoveryStatusMessage.textContent = error instanceof Error
+            ? error.message
+            : "メールアドレスを確認できませんでした。";
+    } finally {
+        verifyRecoveryEmailButton.disabled = false;
+    }
+});
+
+dismissRecoveryDialogButton.addEventListener("click", () => recoveryCodeModal.close());
+
 setupForm.addEventListener("submit", async (event: SubmitEvent) => {
     event.preventDefault();
     const name = new FormData(setupForm).get("name");
@@ -527,3 +711,10 @@ logOutButton.addEventListener("click", async () => {
 });
 
 void checkAuthentication();
+if (pendingRecoveryEmailToken) {
+    recoveryEmailStatusMessage.textContent = "メール内のリンクを開きました。確認を完了してください。";
+    recoveryStatusMessage.textContent = "";
+    manageRecoveryEmailForm.hidden = true;
+    verifyRecoveryEmailButton.hidden = false;
+    recoveryCodeModal.showModal();
+}

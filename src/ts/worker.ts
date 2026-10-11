@@ -6,6 +6,8 @@ interface Env {
     ASSETS: { fetch(request: Request): Promise<Response> };
     BETTER_AUTH_SECRET?: string;
     INITIAL_SETUP_CODE?: string;
+    RESEND_API_KEY?: string;
+    RESEND_FROM_EMAIL?: string;
 }
 
 interface RegistrationToken {
@@ -14,8 +16,30 @@ interface RegistrationToken {
     name: string;
 }
 
+interface RecoveryCode {
+    id: string;
+    userId: string;
+    salt: string;
+    codeHash: string;
+    expiresAt: string | null;
+}
+
+interface RecoveryEmail {
+    email: string | null;
+    pendingEmail: string | null;
+    verifiedAt: string | null;
+}
+
+interface RecoveryChallenge {
+    userId: string;
+    userName: string;
+    recoveryCodeId: string;
+}
+
 type CardStatus = "yet" | "now" | "done" | "stop";
 type CardTag = "マンガ" | "アニメ" | "ラノベ" | "ゲーム";
+
+const recoveryContextPrefix = "recovery:";
 
 interface CardRow {
     id: string;
@@ -57,6 +81,14 @@ function createAuth(env: Env, origin: string) {
                 registration: {
                     requireSession: false,
                     resolveUser: async ({ context }) => {
+                        if (context?.startsWith(recoveryContextPrefix)) {
+                            const recovery = await getRecoveryChallenge(env, context);
+                            return {
+                                id: recovery.userId,
+                                name: recovery.userName,
+                                displayName: recovery.userName,
+                            };
+                        }
                         const registration = await getRegistrationToken(env, context);
                         return {
                             id: registration.userId,
@@ -65,6 +97,10 @@ function createAuth(env: Env, origin: string) {
                         };
                     },
                     afterVerification: async ({ context, user }) => {
+                        if (context?.startsWith(recoveryContextPrefix)) {
+                            await completeRecovery(env, context, user.id);
+                            return { userId: user.id, name: user.name };
+                        }
                         const registration = await getRegistrationToken(env, context);
                         if (registration.userId !== user.id) {
                             throw new Error("The initial registration token does not match the verified user.");
@@ -132,6 +168,394 @@ async function hashRegistrationToken(token: string): Promise<string> {
     return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
+function randomHex(byteCount: number): string {
+    return Array.from(
+        crypto.getRandomValues(new Uint8Array(byteCount)),
+        (byte) => byte.toString(16).padStart(2, "0"),
+    ).join("");
+}
+
+async function hashRecoveryCode(salt: string, code: string): Promise<string> {
+    const digest = await crypto.subtle.digest(
+        "SHA-256",
+        new TextEncoder().encode(`${salt}:${code}`),
+    );
+    return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+function normalizeRecoveryCode(value: string): string {
+    return value.replace(/[\s-]/g, "").toLowerCase();
+}
+
+function formatRecoveryCode(code: string): string {
+    return code.match(/.{1,4}/g)?.join("-") ?? code;
+}
+
+async function getRecoveryChallenge(env: Env, context: string): Promise<RecoveryChallenge> {
+    const token = context.slice(recoveryContextPrefix.length);
+    if (!/^[0-9a-f]{64}$/.test(token)) {
+        throw new Error("The recovery request is invalid or expired.");
+    }
+    const contextHash = await hashRegistrationToken(token);
+    const challenge = await env.DB.prepare(
+        `SELECT recovery_challenges.user_id AS userId, "user".name AS userName,
+                recovery_challenges.recovery_code_id AS recoveryCodeId
+         FROM recovery_challenges
+         INNER JOIN recovery_codes
+           ON recovery_codes.id = recovery_challenges.recovery_code_id
+         INNER JOIN "user" ON "user".id = recovery_challenges.user_id
+         WHERE recovery_challenges.context_hash = ?
+           AND recovery_challenges.expires_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+           AND recovery_codes.reserved_by = recovery_challenges.context_hash
+           AND recovery_codes.reserved_until > strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+           AND (recovery_codes.expires_at IS NULL OR
+                recovery_codes.expires_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+           AND recovery_codes.consumed_at IS NULL
+         LIMIT 1`,
+    ).bind(contextHash).first<RecoveryChallenge>();
+    if (!challenge) {
+        throw new Error("The recovery request is invalid or expired.");
+    }
+    return challenge;
+}
+
+async function completeRecovery(env: Env, context: string, userId: string): Promise<void> {
+    const recovery = await getRecoveryChallenge(env, context);
+    if (recovery.userId !== userId) {
+        throw new Error("The recovery request does not match the account.");
+    }
+    const token = context.slice(recoveryContextPrefix.length);
+    const contextHash = await hashRegistrationToken(token);
+    const completedAt = new Date().toISOString();
+    const results = await env.DB.batch([
+        env.DB.prepare(
+            `UPDATE recovery_codes
+             SET consumed_at = ?, reserved_by = NULL, reserved_until = NULL
+             WHERE id = ? AND user_id = ? AND reserved_by = ? AND consumed_at IS NULL
+               AND reserved_until > strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+               AND (expires_at IS NULL OR expires_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+               AND EXISTS (
+                   SELECT 1 FROM recovery_challenges
+                   WHERE context_hash = ? AND user_id = ? AND recovery_code_id = ?
+                     AND expires_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+               )`,
+        ).bind(completedAt, recovery.recoveryCodeId, userId, contextHash, contextHash, userId, recovery.recoveryCodeId),
+        env.DB.prepare(
+            `DELETE FROM passkey WHERE userId = ?
+             AND EXISTS (SELECT 1 FROM recovery_codes WHERE id = ? AND consumed_at = ?)`,
+        ).bind(userId, recovery.recoveryCodeId, completedAt),
+        env.DB.prepare(
+            `DELETE FROM session WHERE userId = ?
+             AND EXISTS (SELECT 1 FROM recovery_codes WHERE id = ? AND consumed_at = ?)`,
+        ).bind(userId, recovery.recoveryCodeId, completedAt),
+        env.DB.prepare(
+            `DELETE FROM recovery_codes WHERE user_id = ? AND id != ?
+             AND EXISTS (SELECT 1 FROM recovery_codes WHERE id = ? AND consumed_at = ?)`,
+        ).bind(userId, recovery.recoveryCodeId, recovery.recoveryCodeId, completedAt),
+        env.DB.prepare(
+            `DELETE FROM recovery_challenges WHERE user_id = ?
+             AND EXISTS (SELECT 1 FROM recovery_codes WHERE id = ? AND consumed_at = ?)`,
+        ).bind(userId, recovery.recoveryCodeId, completedAt),
+        env.DB.prepare(
+            "DELETE FROM recovery_codes WHERE id = ? AND user_id = ? AND consumed_at = ?",
+        ).bind(recovery.recoveryCodeId, userId, completedAt),
+    ]);
+    if (results[0]?.meta.changes !== 1 || (results[4]?.meta.changes ?? 0) < 1 ||
+        results[5]?.meta.changes !== 1) {
+        throw new Error("The recovery code has already been used or has expired.");
+    }
+}
+
+async function startRecovery(request: Request, env: Env): Promise<Response> {
+    const body: unknown = await request.json().catch(() => null);
+    if (typeof body !== "object" || body === null ||
+        !("email" in body) || typeof body.email !== "string" ||
+        !("code" in body) || typeof body.code !== "string" || body.code.length > 64) {
+        return json({ error: "メールアドレスと復旧コードを入力してください。" }, 400);
+    }
+    const email = body.email.trim().toLowerCase();
+    const code = normalizeRecoveryCode(body.code);
+    if (!isValidEmail(email) || !/^[0-9a-f]{32}$/.test(code)) {
+        return json({ error: "復旧コードが正しくありません。" }, 401);
+    }
+
+    const account = await env.DB.prepare(
+        `SELECT user_id AS userId FROM recovery_emails
+         WHERE email = ? COLLATE NOCASE AND verified_at IS NOT NULL`,
+    ).bind(email).first<{ userId: string }>();
+    if (!account) {
+        return json({ error: "復旧コードが正しくないか、すでに使用されています。" }, 401);
+    }
+    const candidates = await env.DB.prepare(
+        `SELECT id, user_id AS userId, salt, code_hash AS codeHash, expires_at AS expiresAt
+         FROM recovery_codes
+         WHERE user_id = ? AND consumed_at IS NULL
+           AND (expires_at IS NULL OR expires_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+           AND (reserved_by IS NULL OR reserved_until <= strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`,
+    ).bind(account.userId).all<RecoveryCode>();
+    let matched: RecoveryCode | undefined;
+    for (const candidate of candidates.results) {
+        if (constantTimeEquals(await hashRecoveryCode(candidate.salt, code), candidate.codeHash)) {
+            matched = candidate;
+        }
+    }
+    if (!matched) {
+        return json({ error: "復旧コードが正しくないか、すでに使用されています。" }, 401);
+    }
+
+    const token = randomHex(32);
+    const contextHash = await hashRegistrationToken(token);
+    const reservedUntil = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+    const results = await env.DB.batch([
+        env.DB.prepare(
+            `DELETE FROM recovery_challenges
+             WHERE recovery_code_id = ? AND expires_at <= strftime('%Y-%m-%dT%H:%M:%fZ', 'now')`,
+        ).bind(matched.id),
+        env.DB.prepare(
+            `UPDATE recovery_codes
+             SET reserved_by = ?, reserved_until = ?
+             WHERE id = ? AND user_id = ? AND consumed_at IS NULL
+               AND (expires_at IS NULL OR expires_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+               AND (reserved_by IS NULL OR reserved_until <= strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`,
+        ).bind(contextHash, reservedUntil, matched.id, matched.userId),
+        env.DB.prepare(
+            `INSERT INTO recovery_challenges (context_hash, user_id, recovery_code_id, expires_at)
+             SELECT ?, ?, ?, ?
+             WHERE EXISTS (
+                 SELECT 1 FROM recovery_codes
+                 WHERE id = ? AND user_id = ? AND reserved_by = ? AND consumed_at IS NULL
+             )`,
+        ).bind(contextHash, matched.userId, matched.id, reservedUntil, matched.id, matched.userId, contextHash),
+    ]);
+    if (results[1]?.meta.changes !== 1 || results[2]?.meta.changes !== 1) {
+        return json({ error: "復旧コードがすでに使用中です。時間をおいて再度お試しください。" }, 409);
+    }
+    return json({ context: `${recoveryContextPrefix}${token}` });
+}
+
+async function sendEmail(
+    env: Env,
+    to: string,
+    subject: string,
+    text: string,
+): Promise<void> {
+    if (!env.RESEND_API_KEY || !env.RESEND_FROM_EMAIL) {
+        throw new Error("Email delivery is not configured. Set RESEND_API_KEY and RESEND_FROM_EMAIL.");
+    }
+    const response = await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: {
+            Authorization: `Bearer ${env.RESEND_API_KEY}`,
+            "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ from: env.RESEND_FROM_EMAIL, to: [to], subject, text }),
+    });
+    if (!response.ok) {
+        throw new Error(`Resend email delivery failed with status ${response.status}.`);
+    }
+}
+
+async function reserveEmailDelivery(
+    env: Env,
+    email: string,
+    purpose: "verification" | "recovery",
+): Promise<boolean> {
+    const now = new Date();
+    const timestamp = now.toISOString();
+    const dailyCutoff = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
+    const recentCutoff = new Date(now.getTime() - 60 * 1000).toISOString();
+    const results = await env.DB.batch([
+        env.DB.prepare("DELETE FROM recovery_email_deliveries WHERE created_at <= ?").bind(dailyCutoff),
+        env.DB.prepare(
+            `INSERT INTO recovery_email_deliveries (id, email, purpose, created_at)
+             SELECT ?, ?, ?, ?
+             WHERE (
+                 SELECT COUNT(*) FROM recovery_email_deliveries
+                 WHERE email = ? AND purpose = ? AND created_at > ?
+             ) < 5
+             AND NOT EXISTS (
+                 SELECT 1 FROM recovery_email_deliveries
+                 WHERE email = ? AND purpose = ? AND created_at > ?
+             )`,
+        ).bind(
+            crypto.randomUUID(),
+            email,
+            purpose,
+            timestamp,
+            email,
+            purpose,
+            dailyCutoff,
+            email,
+            purpose,
+            recentCutoff,
+        ),
+    ]);
+    return results[1]?.meta.changes === 1;
+}
+
+function isValidEmail(value: string): boolean {
+    return value.length <= 254 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+}
+
+async function getRecoveryEmailStatus(env: Env, userId: string): Promise<Response> {
+    const row = await env.DB.prepare(
+        `SELECT email, pending_email AS pendingEmail, verified_at AS verifiedAt
+         FROM recovery_emails WHERE user_id = ?`,
+    ).bind(userId).first<RecoveryEmail>();
+    return json({
+        email: row?.email ?? null,
+        pendingEmail: row?.pendingEmail ?? null,
+        verified: Boolean(row?.email && row.verifiedAt),
+    });
+}
+
+async function requestRecoveryEmailVerification(
+    request: Request,
+    env: Env,
+    userId: string,
+    origin: string,
+): Promise<Response> {
+    const body: unknown = await request.json().catch(() => null);
+    if (typeof body !== "object" || body === null ||
+        !("email" in body) || typeof body.email !== "string") {
+        return json({ error: "メールアドレスを入力してください。" }, 400);
+    }
+    const email = body.email.trim().toLowerCase();
+    if (!isValidEmail(email)) {
+        return json({ error: "有効なメールアドレスを入力してください。" }, 400);
+    }
+
+    const existing = await env.DB.prepare(
+        `SELECT user_id FROM recovery_emails
+         WHERE (email = ? COLLATE NOCASE OR pending_email = ? COLLATE NOCASE)
+           AND user_id != ? LIMIT 1`,
+    ).bind(email, email, userId).first<{ user_id: string }>();
+    if (existing) {
+        return json({ error: "このメールアドレスは別のアカウントですでに使用されています。" }, 409);
+    }
+    if (!await reserveEmailDelivery(env, email, "verification")) {
+        return json({ error: "確認メールは1分後に再送できます。1日あたりの送信上限は5通です。" }, 429);
+    }
+
+    const token = randomHex(32);
+    const tokenHash = await hashRegistrationToken(token);
+    const expiresAt = new Date(Date.now() + 30 * 60 * 1000).toISOString();
+    const saved = await env.DB.prepare(
+        `INSERT INTO recovery_emails (
+            user_id, pending_email, verification_token_hash, verification_expires_at, updated_at
+         ) VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT(user_id) DO UPDATE SET
+            pending_email = excluded.pending_email,
+            verification_token_hash = excluded.verification_token_hash,
+            verification_expires_at = excluded.verification_expires_at,
+            updated_at = excluded.updated_at
+         WHERE NOT EXISTS (
+            SELECT 1 FROM recovery_emails
+            WHERE (email = ? COLLATE NOCASE OR pending_email = ? COLLATE NOCASE)
+              AND user_id != ?
+         )`,
+    ).bind(userId, email, tokenHash, expiresAt, new Date().toISOString(), email, email, userId).run();
+    if (saved.meta.changes !== 1) {
+        return json({ error: "このメールアドレスは別のアカウントですでに使用されています。" }, 409);
+    }
+
+    const verificationUrl = new URL("/", origin);
+    verificationUrl.searchParams.set("verify-recovery-email", token);
+    await sendEmail(
+        env,
+        email,
+        "Media Kanbanの復旧用メールアドレスを確認",
+        `復旧用メールアドレスを登録するリクエストを受け付けました。\n\n` +
+            `次のリンクを開き、確認ボタンを押して登録を完了してください。\n` +
+            `${verificationUrl.toString()}\n\nこのリンクは30分で期限切れになります。`,
+    );
+    return json({ message: "確認メールを送信しました。メール内のリンクを開いて登録を完了してください。" });
+}
+
+async function verifyRecoveryEmail(request: Request, env: Env): Promise<Response> {
+    const body: unknown = await request.json().catch(() => null);
+    if (typeof body !== "object" || body === null ||
+        !("token" in body) || typeof body.token !== "string" ||
+        !/^[0-9a-f]{64}$/.test(body.token)) {
+        return json({ error: "確認リンクが無効か、期限切れです。" }, 400);
+    }
+    const tokenHash = await hashRegistrationToken(body.token);
+    const result = await env.DB.prepare(
+        `UPDATE recovery_emails
+         SET email = pending_email, pending_email = NULL, verified_at = ?,
+             verification_token_hash = NULL, verification_expires_at = NULL,
+             updated_at = ?
+         WHERE verification_token_hash = ? AND pending_email IS NOT NULL
+           AND verification_expires_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+           AND NOT EXISTS (
+               SELECT 1 FROM recovery_emails AS other
+               WHERE other.user_id != recovery_emails.user_id
+                 AND other.email = recovery_emails.pending_email COLLATE NOCASE
+           )`,
+    ).bind(new Date().toISOString(), new Date().toISOString(), tokenHash).run();
+    if (result.meta.changes !== 1) {
+        return json({ error: "確認リンクが無効か、期限切れです。" }, 400);
+    }
+    return json({ success: true });
+}
+
+const genericRecoveryEmailMessage =
+    "登録済みの復旧用メールアドレスに一致する場合、コードの送信を受け付けました。届かない場合は時間をおいて再度お試しください。";
+
+async function requestRecoveryCodeByEmail(request: Request, env: Env): Promise<Response> {
+    const body: unknown = await request.json().catch(() => null);
+    if (typeof body !== "object" || body === null ||
+        !("email" in body) || typeof body.email !== "string") {
+        return json({ error: "メールアドレスを入力してください。" }, 400);
+    }
+    const email = body.email.trim().toLowerCase();
+    if (!isValidEmail(email)) {
+        return json({ error: "有効なメールアドレスを入力してください。" }, 400);
+    }
+
+    const account = await env.DB.prepare(
+        `SELECT recovery_emails.user_id AS userId, "user".name AS userName
+         FROM recovery_emails
+         INNER JOIN "user" ON "user".id = recovery_emails.user_id
+         WHERE recovery_emails.email = ? COLLATE NOCASE
+           AND recovery_emails.verified_at IS NOT NULL
+         LIMIT 1`,
+    ).bind(email).first<{ userId: string; userName: string }>();
+    if (!account || !await reserveEmailDelivery(env, email, "recovery")) {
+        return json({ message: genericRecoveryEmailMessage }, 202);
+    }
+
+    await env.DB.prepare(
+        `DELETE FROM recovery_codes WHERE user_id = ? AND consumed_at IS NULL
+         AND expires_at <= strftime('%Y-%m-%dT%H:%M:%fZ', 'now')`,
+    ).bind(account.userId).run();
+    const code = randomHex(16);
+    const salt = randomHex(16);
+    const codeId = crypto.randomUUID();
+    const expiresAt = new Date(Date.now() + 20 * 60 * 1000).toISOString();
+    await env.DB.prepare(
+        `INSERT INTO recovery_codes (id, user_id, salt, code_hash, expires_at)
+         VALUES (?, ?, ?, ?, ?)`,
+    ).bind(codeId, account.userId, salt, await hashRecoveryCode(salt, code), expiresAt).run();
+    try {
+        await sendEmail(
+            env,
+            email,
+            "Media Kanbanのアカウント復旧コード",
+            `Media Kanbanのアカウント復旧リクエストを受け付けました。\n\n` +
+                `復旧コード: ${formatRecoveryCode(code)}\n\n` +
+                `このコードは20分間有効で、一度だけ使用できます。` +
+                `心当たりがない場合は、このメールを無視してください。`,
+        );
+    } catch (error) {
+        await env.DB.prepare("DELETE FROM recovery_codes WHERE id = ? AND consumed_at IS NULL")
+            .bind(codeId).run();
+        console.error("Recovery email delivery failed.", error);
+        return json({ message: genericRecoveryEmailMessage }, 202);
+    }
+    return json({ message: genericRecoveryEmailMessage }, 202);
+}
+
 async function getRegistrationToken(
     env: Env,
     context: string | null | undefined,
@@ -186,8 +610,7 @@ async function createRegistrationToken(request: Request, env: Env): Promise<Resp
         return json({ error: "Initial account registration has already been completed." }, 409);
     }
 
-    const tokenBytes = crypto.getRandomValues(new Uint8Array(32));
-    const token = Array.from(tokenBytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+    const token = randomHex(32);
     const tokenHash = await hashRegistrationToken(token);
     const userId = crypto.randomUUID();
     const result = await env.DB.prepare(
@@ -397,6 +820,30 @@ async function handleApi(request: Request, env: Env): Promise<Response> {
 
     if (url.pathname === "/api/registration/context" && request.method === "POST") {
         return createRegistrationToken(request, env);
+    }
+
+    if (url.pathname === "/api/recovery/start" && request.method === "POST") {
+        return startRecovery(request, env);
+    }
+
+    if (url.pathname === "/api/recovery/email-code" && request.method === "POST") {
+        return requestRecoveryCodeByEmail(request, env);
+    }
+
+    if (url.pathname === "/api/recovery-email/verify" && request.method === "POST") {
+        return verifyRecoveryEmail(request, env);
+    }
+
+    if (url.pathname === "/api/recovery-email" &&
+        (request.method === "GET" || request.method === "POST")) {
+        const user = await getSessionUser(request, env);
+        if (user instanceof Response) {
+            return user;
+        }
+        if (request.method === "GET") {
+            return getRecoveryEmailStatus(env, user.id);
+        }
+        return requestRecoveryEmailVerification(request, env, user.id, url.origin);
     }
 
     if (url.pathname === "/api/cards" && (request.method === "GET" || request.method === "POST")) {
