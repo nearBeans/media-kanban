@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Lexend:wght@100..900&family=Noto+Sans+JP:wght@100..900&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="src/css/sanitize.css">
+    <link rel="stylesheet" href="src/css/style.css">
+    <title>Media Kanban</title>
+</head>
+
+<body>
+    <section class="yet">
+        <h1>未視聴・未読</h1>
+        <div class="add-card-area">
+            <button class="add-card-trigger" type="button" aria-label="未視聴・未読にカードを追加" aria-expanded="false">+</button>
+        </div>
+    </section>
+    <section class="now">
+        <h1>視聴中・読書中</h1>
+        <div class="add-card-area">
+            <button class="add-card-trigger" type="button" aria-label="視聴中・読書中にカードを追加" aria-expanded="false">+</button>
+        </div>
+    </section>
+    <section class="done">
+        <h1>完結・読了</h1>
+        <div class="add-card-area">
+            <button class="add-card-trigger" type="button" aria-label="完結・読了にカードを追加" aria-expanded="false">+</button>
+        </div>
+    </section>
+    <section class="stop">
+        <h1>諦め</h1>
+        <div class="add-card-area">
+            <button class="add-card-trigger" type="button" aria-label="諦めにカードを追加" aria-expanded="false">+</button>
+        </div>
+    </section>
+    <script type="module" src="src/js/main.js"></script>
+</body>
+
+</html>
