@@ -17,18 +17,8 @@ const loginButton = document.querySelector<HTMLButtonElement>("#passkey-login");
 const accountBar = document.querySelector<HTMLElement>("#account-bar");
 const accountName = document.querySelector<HTMLElement>("#account-name");
 const signOutButton = document.querySelector<HTMLButtonElement>("#sign-out");
-const showKanbanButton = document.querySelector<HTMLButtonElement>("#show-kanban");
-const showTableButton = document.querySelector<HTMLButtonElement>("#show-table");
+const toggleViewButton = document.querySelector<HTMLButtonElement>("#toggle-view");
 const exportCsvButton = document.querySelector<HTMLButtonElement>("#export-csv");
-const openCsvImportButton = document.querySelector<HTMLButtonElement>("#open-import-csv");
-const csvImportDialog = document.querySelector<HTMLDialogElement>("#csv-import-dialog");
-const csvFileInput = document.querySelector<HTMLInputElement>("#csv-file");
-const csvColumnMapping = document.querySelector<HTMLElement>("#csv-column-mapping");
-const csvImportMessage = document.querySelector<HTMLElement>("#csv-import-message");
-const csvPreview = document.querySelector<HTMLElement>("#csv-preview");
-const suggestAllCsvRowsButton = document.querySelector<HTMLButtonElement>("#suggest-all-csv-rows");
-const submitCsvImportButton = document.querySelector<HTMLButtonElement>("#submit-csv-import");
-const closeCsvImportButton = document.querySelector<HTMLButtonElement>("#close-csv-import");
 const tableView = document.querySelector<HTMLElement>("#table-view");
 const tableStatusFilter = document.querySelector<HTMLSelectElement>("#table-status-filter");
 const tableSearch = document.querySelector<HTMLInputElement>("#table-search");
@@ -36,6 +26,14 @@ const tableTagFilters = document.querySelector<HTMLElement>("#table-tag-filters"
 const clearTableFiltersButton = document.querySelector<HTMLButtonElement>("#clear-table-filters");
 const tableResultCount = document.querySelector<HTMLOutputElement>("#table-result-count");
 const tableRows = document.querySelector<HTMLTableSectionElement>("#table-rows");
+const cardEditorDialog = document.querySelector<HTMLDialogElement>("#card-editor-dialog");
+const cardEditorForm = document.querySelector<HTMLFormElement>("#card-editor-form");
+const cardEditorTitle = document.querySelector<HTMLInputElement>("#card-editor-title");
+const cardEditorStatus = document.querySelector<HTMLSelectElement>("#card-editor-status");
+const cardEditorTags = document.querySelector<HTMLElement>("#card-editor-tags");
+const cardEditorMessage = document.querySelector<HTMLElement>("#card-editor-message");
+const deleteCardButton = document.querySelector<HTMLButtonElement>("#delete-card");
+const closeCardEditorButton = document.querySelector<HTMLButtonElement>("#close-card-editor");
 const manageRecoveryEmailButton = document.querySelector<HTMLButtonElement>("#manage-recovery-email");
 const recoveryDialog = document.querySelector<HTMLDialogElement>("#recovery-dialog");
 const recoveryDialogMessage = document.querySelector<HTMLElement>("#recovery-dialog-message");
@@ -52,7 +50,8 @@ let draggedCard: HTMLElement | null = null;
 let dropSection: HTMLElement | null = null;
 let dropBefore: HTMLElement | null = null;
 let dropIndicator: HTMLElement | null = null;
-const tagOptions = ["マンガ", "アニメ", "ラノベ", "ゲーム"];
+type CardMediaType = "マンガ" | "アニメ" | "ラノベ" | "ゲーム";
+const tagOptions: CardMediaType[] = ["マンガ", "アニメ", "ラノベ", "ゲーム"];
 let nextTagInputId = 0;
 type CardStatus = "yet" | "now" | "done" | "stop";
 const cardStatusOrder: CardStatus[] = ["yet", "now", "done", "stop"];
@@ -67,6 +66,10 @@ function isCardStatus(value: string): value is CardStatus {
     return cardStatusOrder.includes(value as CardStatus);
 }
 
+function isCardMediaType(value: string): value is CardMediaType {
+    return tagOptions.some((tag) => tag === value);
+}
+
 interface CardData {
     id: string;
     title: string;
@@ -78,34 +81,22 @@ interface CardsResponse {
     user: { id: string; name: string };
     cards: CardData[];
 }
-interface CsvImportRow {
-    source: string[];
-    title: string;
-    status: CardStatus;
-    tags: string[];
-    include: boolean;
-    suggesting: boolean;
-}
-
 type BoardView = "kanban" | "table";
 let currentCards: CardData[] = [];
-let csvHeaders: string[] = [];
-let csvRecords: string[][] = [];
-let csvImportRows: CsvImportRow[] = [];
-let isBulkSuggesting = false;
+let editingCardId: string | null = null;
 
 if (!board || !authPanel || !authMessage || !recoveryRequestPanel || !recoveryRequestMessage ||
     !signupPanel || !signupMessage || !signupLink || !registrationForm || !recoveryCodePanel ||
     !recoveryCodeMessage || !recoveryForm || !requestRecoveryCodeForm || !loginButton ||
     !accountBar || !accountName || !signOutButton || !manageRecoveryEmailButton || !recoveryDialog ||
-    !showKanbanButton || !showTableButton || !tableView || !tableStatusFilter || !tableSearch ||
+    !toggleViewButton || !tableView || !tableStatusFilter || !tableSearch ||
     !tableTagFilters || !clearTableFiltersButton || !tableResultCount || !tableRows ||
+    !cardEditorDialog || !cardEditorForm || !cardEditorTitle || !cardEditorStatus ||
+    !cardEditorTags || !cardEditorMessage || !deleteCardButton || !closeCardEditorButton ||
     !recoveryDialogMessage || !recoveryEmailStatus || !recoveryEmailForm ||
     !confirmRecoveryEmailButton || !closeRecoveryDialogButton || !recoveryEmailConfirmedDialog ||
     !recoveryEmailConfirmedMessage || !closeRecoveryEmailConfirmedButton || !appMessage || !mobileBoardHint ||
-    !exportCsvButton || !openCsvImportButton || !csvImportDialog || !csvFileInput || !csvColumnMapping ||
-    !csvImportMessage || !csvPreview || !suggestAllCsvRowsButton || !submitCsvImportButton ||
-    !closeCsvImportButton) {
+    !exportCsvButton) {
     throw new Error("The application is missing required page elements.");
 }
 const pageBoard = board;
@@ -124,8 +115,7 @@ const passkeyLogin = loginButton;
 const userBar = accountBar;
 const userName = accountName;
 const logOutButton = signOutButton;
-const kanbanViewButton = showKanbanButton;
-const tableViewButton = showTableButton;
+const viewSwitcher = toggleViewButton;
 const cardTableView = tableView;
 const cardTableStatusFilter = tableStatusFilter;
 const cardTableSearch = tableSearch;
@@ -133,6 +123,14 @@ const cardTableTagFilters = tableTagFilters;
 const resetCardTableFiltersButton = clearTableFiltersButton;
 const cardTableResultCount = tableResultCount;
 const cardTableRows = tableRows;
+const cardEditor = cardEditorDialog;
+const editCardForm = cardEditorForm;
+const editCardTitle = cardEditorTitle;
+const editCardStatus = cardEditorStatus;
+const editCardTags = cardEditorTags;
+const editCardMessage = cardEditorMessage;
+const removeCardButton = deleteCardButton;
+const dismissCardEditorButton = closeCardEditorButton;
 const openRecoveryDialogButton = manageRecoveryEmailButton;
 const recoveryCodeModal = recoveryDialog;
 const recoveryStatusMessage = recoveryDialogMessage;
@@ -145,352 +143,14 @@ const emailConfirmedMessage = recoveryEmailConfirmedMessage;
 const dismissEmailConfirmedButton = closeRecoveryEmailConfirmedButton;
 const appStatus = appMessage;
 const boardSwipeHint = mobileBoardHint;
-const importDialog = csvImportDialog;
-const importFileInput = csvFileInput;
-const importColumnMapping = csvColumnMapping;
-const importMessage = csvImportMessage;
-const importPreview = csvPreview;
-const suggestAllRowsButton = suggestAllCsvRowsButton;
-const submitImportButton = submitCsvImportButton;
-const dismissImportButton = closeCsvImportButton;
 let requestedRecoveryEmail = "";
 let pendingRecoveryEmailToken = new URL(location.href).searchParams.get("verify-recovery-email");
 if (pendingRecoveryEmailToken) {
     history.replaceState(null, "", location.pathname);
 }
 
-function parseCsv(text: string): string[][] {
-    const input = text.replace(/^\uFEFF/, "");
-    const rows: string[][] = [];
-    let row: string[] = [];
-    let field = "";
-    let quoted = false;
-    let afterQuote = false;
-    for (let index = 0; index < input.length; index += 1) {
-        const character = input[index] ?? "";
-        if (quoted) {
-            if (character === '"') {
-                if (input[index + 1] === '"') {
-                    field += '"';
-                    index += 1;
-                } else {
-                    quoted = false;
-                    afterQuote = true;
-                }
-            } else {
-                field += character;
-            }
-            continue;
-        }
-        if (afterQuote) {
-            if (character === ",") {
-                row.push(field);
-                field = "";
-                afterQuote = false;
-            } else if (character === "\n" || character === "\r") {
-                row.push(field);
-                if (row.some((value) => value.length > 0)) {
-                    rows.push(row);
-                }
-                row = [];
-                field = "";
-                afterQuote = false;
-                if (character === "\r" && input[index + 1] === "\n") {
-                    index += 1;
-                }
-            } else {
-                throw new Error("CSVの閉じ引用符の後に予期しない文字があります。");
-            }
-            continue;
-        }
-        if (character === '"' && field.length === 0) {
-            quoted = true;
-        } else if (character === ",") {
-            row.push(field);
-            field = "";
-        } else if (character === "\n" || character === "\r") {
-            row.push(field);
-            if (row.some((value) => value.length > 0)) {
-                rows.push(row);
-            }
-            row = [];
-            field = "";
-            if (character === "\r" && input[index + 1] === "\n") {
-                index += 1;
-            }
-        } else if (character === '"') {
-            throw new Error("CSVの引用符の位置が正しくありません。");
-        } else {
-            field += character;
-        }
-    }
-    if (quoted) {
-        throw new Error("CSVの引用符が閉じられていません。");
-    }
-    row.push(field);
-    if (row.some((value) => value.length > 0)) {
-        rows.push(row);
-    }
-    if (rows.length < 2) {
-        throw new Error("ヘッダーと1件以上のデータ行があるCSVを選択してください。");
-    }
-    const width = rows[0]?.length ?? 0;
-    if (width === 0 || rows.some((values) => values.length !== width)) {
-        throw new Error("CSVの各行で列数が一致していません。");
-    }
-    if (rows.length - 1 > 100) {
-        throw new Error("一度にインポートできるのは100行までです。");
-    }
-    return rows;
-}
-
 function escapeCsvField(value: string): string {
     return /[",\r\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
-}
-
-function selectedCsvColumn(role: string): number | null {
-    const select = importColumnMapping.querySelector<HTMLSelectElement>(`select[data-csv-role="${role}"]`);
-    if (!select || select.value === "") {
-        return null;
-    }
-    const index = Number(select.value);
-    return Number.isInteger(index) && index >= 0 && index < csvHeaders.length ? index : null;
-}
-
-function defaultColumnIndex(aliases: string[]): number | null {
-    const normalized = csvHeaders.map((header) => header.trim().toLocaleLowerCase());
-    const index = normalized.findIndex((header) => aliases.includes(header));
-    return index < 0 ? null : index;
-}
-
-function buildCsvColumnMapping(): void {
-    importColumnMapping.replaceChildren();
-    const roles = [
-        { key: "title", label: "タイトル（必須）", aliases: ["title", "name", "作品名", "タイトル"] },
-        { key: "status", label: "状態", aliases: ["status", "state", "状態", "ステータス"] },
-        { key: "tags", label: "タグ", aliases: ["tags", "tag", "タグ", "ジャンル"] },
-    ];
-    for (const role of roles) {
-        const label = document.createElement("label");
-        label.textContent = role.label;
-        const select = document.createElement("select");
-        select.dataset.csvRole = role.key;
-        const noColumn = document.createElement("option");
-        noColumn.value = "";
-        noColumn.textContent = role.key === "title" ? "列を選択してください" : "列を使わない";
-        select.append(noColumn);
-        csvHeaders.forEach((header, index) => {
-            const option = document.createElement("option");
-            option.value = String(index);
-            option.textContent = header || `列${index + 1}`;
-            select.append(option);
-        });
-        const suggestedIndex = defaultColumnIndex(role.aliases);
-        if (suggestedIndex !== null) {
-            select.value = String(suggestedIndex);
-        }
-        label.append(select);
-        importColumnMapping.append(label);
-    }
-    importColumnMapping.hidden = false;
-}
-
-function parseImportedStatus(value: string): CardStatus {
-    const normalized = value.trim().toLocaleLowerCase();
-    if (isCardStatus(normalized)) {
-        return normalized;
-    }
-    const matching = Object.entries(cardStatusLabels).find(([, label]) => label === value.trim());
-    return matching?.[0] as CardStatus | undefined ?? "yet";
-}
-
-function parseImportedTags(value: string): string[] {
-    return [...new Set(value.split(/[;,、|]/).map((tag) => tag.trim()).filter((tag) => tagOptions.includes(tag)))];
-}
-
-function mapCsvRecords(): void {
-    const titleColumn = selectedCsvColumn("title");
-    if (titleColumn === null) {
-        csvImportRows = [];
-        renderCsvPreview();
-        submitImportButton.disabled = true;
-        suggestAllRowsButton.disabled = true;
-        importMessage.textContent = "タイトル列を選択してください。";
-        return;
-    }
-    const statusColumn = selectedCsvColumn("status");
-    const tagsColumn = selectedCsvColumn("tags");
-    csvImportRows = csvRecords.map((source) => ({
-        source,
-        title: (source[titleColumn] ?? "").trim(),
-        status: statusColumn === null ? "yet" : parseImportedStatus(source[statusColumn] ?? ""),
-        tags: tagsColumn === null ? [] : parseImportedTags(source[tagsColumn] ?? ""),
-        include: true,
-        suggesting: false,
-    })).filter((row) => row.title.length > 0);
-    renderCsvPreview();
-    const hasRows = csvImportRows.length > 0;
-    submitImportButton.disabled = !hasRows;
-    suggestAllRowsButton.disabled = !hasRows;
-    importMessage.textContent = hasRows
-        ? `${csvImportRows.length}件をプレビュー中です。状態・タグを確認してからインポートしてください。`
-        : "タイトルが空のデータ行はありません。";
-}
-
-function renderCsvPreview(): void {
-    importPreview.replaceChildren();
-    if (csvImportRows.length === 0) {
-        return;
-    }
-    const table = document.createElement("table");
-    const thead = document.createElement("thead");
-    const heading = document.createElement("tr");
-    for (const label of ["取込", "タイトル", "状態", "タグ", "元データ（全列）", "AI候補"]) {
-        const cell = document.createElement("th");
-        cell.scope = "col";
-        cell.textContent = label;
-        heading.append(cell);
-    }
-    thead.append(heading);
-    const tbody = document.createElement("tbody");
-    const seenTitles = new Set(currentCards.map((card) => card.title));
-    csvImportRows.forEach((row, index) => {
-        const tr = document.createElement("tr");
-        const duplicate = !row.title || seenTitles.has(row.title);
-        if (row.title) {
-            seenTitles.add(row.title);
-        }
-        const includeCell = document.createElement("td");
-        const includeLabel = document.createElement("label");
-        includeLabel.className = "csv-include";
-        const include = document.createElement("input");
-        include.type = "checkbox";
-        include.checked = row.include;
-        include.disabled = duplicate || !row.title;
-        include.dataset.csvIndex = String(index);
-        includeLabel.append(include, document.createTextNode(duplicate ? "重複" : "取込"));
-        includeCell.append(includeLabel);
-        if (duplicate) {
-            includeCell.classList.add("csv-duplicate");
-            includeCell.title = "既存カードまたはCSV内でタイトルが完全一致しています。";
-        }
-
-        const titleCell = document.createElement("td");
-        const titleInput = document.createElement("input");
-        titleInput.type = "text";
-        titleInput.maxLength = 100;
-        titleInput.value = row.title;
-        titleInput.dataset.csvIndex = String(index);
-        titleInput.dataset.csvField = "title";
-        titleCell.append(titleInput);
-
-        const statusCell = document.createElement("td");
-        const statusSelect = document.createElement("select");
-        statusSelect.dataset.csvIndex = String(index);
-        statusSelect.dataset.csvField = "status";
-        for (const status of cardStatusOrder) {
-            const option = document.createElement("option");
-            option.value = status;
-            option.textContent = cardStatusLabels[status];
-            statusSelect.append(option);
-        }
-        statusSelect.value = row.status;
-        statusCell.append(statusSelect);
-
-        const tagsCell = document.createElement("td");
-        tagsCell.className = "csv-tags";
-        for (const tag of tagOptions) {
-            const label = document.createElement("label");
-            const checkbox = document.createElement("input");
-            checkbox.type = "checkbox";
-            checkbox.checked = row.tags.includes(tag);
-            checkbox.dataset.csvIndex = String(index);
-            checkbox.dataset.csvTag = tag;
-            label.append(checkbox, document.createTextNode(tag));
-            tagsCell.append(label);
-        }
-
-        const suggestCell = document.createElement("td");
-        const suggestButton = document.createElement("button");
-        suggestButton.type = "button";
-        suggestButton.textContent = row.suggesting ? "候補を取得中…" : "候補";
-        suggestButton.disabled = row.suggesting || isBulkSuggesting;
-        suggestButton.dataset.csvSuggest = String(index);
-        suggestCell.append(suggestButton);
-
-        const sourceCell = document.createElement("td");
-        sourceCell.className = "csv-source-data";
-        sourceCell.textContent = row.source
-            .map((value, column) => `${csvHeaders[column] || `列${column + 1}`}: ${value}`)
-            .filter((entry) => !entry.endsWith(": "))
-            .join("\n");
-        sourceCell.title = sourceCell.textContent;
-
-        tr.append(includeCell, titleCell, statusCell, tagsCell, sourceCell, suggestCell);
-        tbody.append(tr);
-    });
-    table.append(thead, tbody);
-    importPreview.append(table);
-}
-
-function updateCsvRowFromEvent(target: Element): void {
-    const indexValue = target.getAttribute("data-csv-index");
-    const index = indexValue === null ? -1 : Number(indexValue);
-    const row = csvImportRows[index];
-    if (!row) {
-        return;
-    }
-    if (target instanceof HTMLInputElement && target.dataset.csvField === "title") {
-        row.title = target.value.trim();
-    } else if (target instanceof HTMLSelectElement && target.dataset.csvField === "status" &&
-        isCardStatus(target.value)) {
-        row.status = target.value;
-    } else if (target instanceof HTMLInputElement && target.dataset.csvTag) {
-        const tag = target.dataset.csvTag;
-        if (target.checked && tagOptions.includes(tag) && !row.tags.includes(tag)) {
-            row.tags.push(tag);
-        } else if (!target.checked) {
-            row.tags = row.tags.filter((item) => item !== tag);
-        }
-    } else if (target instanceof HTMLInputElement && target.type === "checkbox") {
-        row.include = target.checked;
-    }
-    renderCsvPreview();
-}
-
-async function requestCsvSuggestions(row: CsvImportRow): Promise<boolean> {
-    row.suggesting = true;
-    renderCsvPreview();
-    let succeeded = false;
-    try {
-        const suggestion = await requestJson<{ status: CardStatus; tag: string }>("/api/cards/suggest", {
-            method: "POST",
-            body: JSON.stringify({
-                title: row.title,
-                fields: row.source.map((value, column) => ({
-                    name: csvHeaders[column] || `列${column + 1}`,
-                    value,
-                })),
-            }),
-        });
-        if (!isCardStatus(suggestion.status) || !tagOptions.includes(suggestion.tag)) {
-            throw new Error("AI候補の応答が正しくありません。");
-        }
-        row.status = suggestion.status;
-        if (!row.tags.includes(suggestion.tag)) {
-            row.tags.push(suggestion.tag);
-        }
-        importMessage.textContent = `「${row.title}」に候補を反映しました。内容を確認してください。`;
-        succeeded = true;
-    } catch (error) {
-        importMessage.textContent = error instanceof Error
-            ? error.message
-            : "AI候補を取得できませんでした。手動で設定してください。";
-    } finally {
-        row.suggesting = false;
-        renderCsvPreview();
-    }
-    return succeeded;
 }
 
 async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
@@ -526,8 +186,10 @@ function setBoardView(view: BoardView): void {
     pageBoard.hidden = !isKanban;
     boardSwipeHint.hidden = !isKanban;
     cardTableView.hidden = isKanban;
-    kanbanViewButton.setAttribute("aria-pressed", String(isKanban));
-    tableViewButton.setAttribute("aria-pressed", String(!isKanban));
+    viewSwitcher.textContent = isKanban ? "表" : "カ";
+    const nextViewLabel = isKanban ? "表形式に切り替え" : "カンバンに切り替え";
+    viewSwitcher.setAttribute("aria-label", nextViewLabel);
+    viewSwitcher.title = nextViewLabel;
     if (!isKanban) {
         renderCardTable();
     }
@@ -580,6 +242,9 @@ function createCard(id: string, title: string, tags: string[], status: CardStatu
     card.className = "card";
     card.draggable = !matchMedia("(pointer: coarse)").matches;
     card.dataset.cardId = id;
+    card.tabIndex = 0;
+    card.setAttribute("role", "group");
+    card.setAttribute("aria-label", `${title} 編集`);
 
     const heading = document.createElement("h2");
     heading.className = "title";
@@ -626,6 +291,16 @@ function renderCardTable(): void {
     cardTableRows.replaceChildren();
     for (const card of filteredCards) {
         const row = document.createElement("tr");
+        const editCell = document.createElement("td");
+        editCell.className = "table-edit-cell";
+        const editButton = document.createElement("button");
+        editButton.className = "table-edit-button";
+        editButton.type = "button";
+        editButton.dataset.cardId = card.id;
+        editButton.textContent = "編集";
+        editButton.setAttribute("aria-label", `「${card.title}」を編集`);
+        editCell.append(editButton);
+
         const titleCell = document.createElement("th");
         titleCell.scope = "row";
         titleCell.textContent = card.title;
@@ -646,7 +321,7 @@ function renderCardTable(): void {
             }
         }
 
-        row.append(titleCell, statusCell, tagsCell);
+        row.append(editCell, titleCell, statusCell, tagsCell);
         cardTableRows.append(row);
     }
 
@@ -654,7 +329,7 @@ function renderCardTable(): void {
         const row = document.createElement("tr");
         const cell = document.createElement("td");
         cell.className = "table-empty";
-        cell.colSpan = 3;
+        cell.colSpan = 4;
         cell.textContent = currentCards.length === 0
             ? "カードはまだありません。"
             : "条件に一致するカードがありません。";
@@ -663,6 +338,41 @@ function renderCardTable(): void {
     }
 
     cardTableResultCount.value = `${filteredCards.length} / ${currentCards.length} 件`;
+}
+
+function openCardEditor(cardId: string): void {
+    const card = currentCards.find((item) => item.id === cardId);
+    if (!card) {
+        setAppMessage("編集する作品が見つかりません。ボードを再読み込みしてください。");
+        return;
+    }
+
+    editingCardId = card.id;
+    editCardTitle.value = card.title;
+    editCardStatus.value = card.status;
+    editCardTags.querySelectorAll<HTMLInputElement>('input[name="tags"]').forEach((checkbox) => {
+        checkbox.checked = card.tags.includes(checkbox.value);
+    });
+    editCardMessage.textContent = "";
+    cardEditor.showModal();
+    editCardTitle.focus();
+}
+
+function renderUpdatedBoardCard(card: CardData): void {
+    const existingCard = pageBoard.querySelector<HTMLElement>(`.card[data-card-id="${card.id}"]`);
+    const destination = pageBoard.querySelector<HTMLElement>(`section[data-status="${card.status}"]`);
+    const addArea = destination?.querySelector<HTMLElement>(".add-card-area");
+    if (!destination || !addArea) {
+        throw new Error(`The "${card.status}" column is missing its add-card area.`);
+    }
+
+    const replacement = createCard(card.id, card.title, card.tags, card.status);
+    if (existingCard?.parentElement === destination) {
+        existingCard.replaceWith(replacement);
+    } else {
+        existingCard?.remove();
+        destination.insertBefore(replacement, addArea);
+    }
 }
 
 async function loadBoard(): Promise<void> {
@@ -859,6 +569,16 @@ pageBoard.addEventListener("click", (event: MouseEvent) => {
         return;
     }
 
+    const card = target.closest<HTMLElement>(".card");
+    if (card && !target.closest("select, button, input, a")) {
+        const cardId = card.dataset.cardId;
+        if (!cardId) {
+            throw new Error("A card is missing its database ID.");
+        }
+        openCardEditor(cardId);
+        return;
+    }
+
     const trigger = target.closest<HTMLButtonElement>(".add-card-trigger");
     const section = trigger?.closest<HTMLElement>("section");
     const area = trigger?.closest<HTMLElement>(".add-card-area");
@@ -884,6 +604,20 @@ pageBoard.addEventListener("click", (event: MouseEvent) => {
     form.classList.add("is-open");
     form.style.height = `${form.scrollHeight}px`;
     form.querySelector<HTMLInputElement>(".title-input")?.focus();
+});
+
+pageBoard.addEventListener("keydown", (event: KeyboardEvent) => {
+    const target = event.target;
+    if (!(target instanceof HTMLElement) || !target.matches(".card") ||
+        (event.key !== "Enter" && event.key !== " ")) {
+        return;
+    }
+    event.preventDefault();
+    const cardId = target.dataset.cardId;
+    if (!cardId) {
+        throw new Error("A card is missing its database ID.");
+    }
+    openCardEditor(cardId);
 });
 
 pageBoard.addEventListener("change", (event: Event) => {
@@ -1098,8 +832,113 @@ passkeyLogin.addEventListener("click", async () => {
     }
 });
 
-kanbanViewButton.addEventListener("click", () => setBoardView("kanban"));
-tableViewButton.addEventListener("click", () => setBoardView("table"));
+viewSwitcher.addEventListener("click", () => {
+    setBoardView(pageBoard.hidden ? "kanban" : "table");
+});
+
+cardTableRows.addEventListener("click", (event: MouseEvent) => {
+    const target = event.target;
+    if (!(target instanceof Element)) {
+        return;
+    }
+    const button = target.closest<HTMLButtonElement>(".table-edit-button");
+    const cardId = button?.dataset.cardId;
+    if (cardId) {
+        openCardEditor(cardId);
+    }
+});
+
+editCardForm.addEventListener("submit", async (event: SubmitEvent) => {
+    event.preventDefault();
+    if (!editingCardId) {
+        throw new Error("No card is selected for editing.");
+    }
+
+    const title = editCardTitle.value.trim();
+    if (!title) {
+        editCardMessage.textContent = "タイトルを入力してください。";
+        editCardTitle.focus();
+        return;
+    }
+    const status = editCardStatus.value;
+    if (!isCardStatus(status)) {
+        throw new Error("The card editor contains an invalid status.");
+    }
+    const tagCheckboxes = Array.from(editCardTags.querySelectorAll<HTMLInputElement>('input[name="tags"]'));
+    const tags = tagCheckboxes.filter((checkbox) => checkbox.checked).map((checkbox) => checkbox.value);
+    if (tags.length === 0 || tags.some((tag) => !isCardMediaType(tag))) {
+        editCardMessage.textContent = "メディアタイプを1つ以上選択してください。";
+        return;
+    }
+
+    const buttons = Array.from(editCardForm.querySelectorAll<HTMLButtonElement>("button"));
+    buttons.forEach((button) => {
+        button.disabled = true;
+    });
+    editCardMessage.textContent = "保存しています…";
+    try {
+        const card = await requestJson<CardData>(`/api/cards/${encodeURIComponent(editingCardId)}`, {
+            method: "PUT",
+            body: JSON.stringify({ title, status, tags }),
+        });
+        currentCards = currentCards.map((current) => current.id === card.id ? card : current);
+        renderUpdatedBoardCard(card);
+        renderCardTable();
+        cardEditor.close();
+        setAppMessage("作品を更新しました。");
+    } catch (error) {
+        editCardMessage.textContent = error instanceof Error
+            ? error.message
+            : "作品を保存できませんでした。";
+    } finally {
+        buttons.forEach((button) => {
+            button.disabled = false;
+        });
+    }
+});
+
+removeCardButton.addEventListener("click", async () => {
+    if (!editingCardId) {
+        throw new Error("No card is selected for deletion.");
+    }
+    const card = currentCards.find((item) => item.id === editingCardId);
+    if (!card) {
+        throw new Error("The selected card could not be found.");
+    }
+    if (!window.confirm(`「${card.title}」を削除します。この操作は取り消せません。`)) {
+        return;
+    }
+
+    const buttons = Array.from(editCardForm.querySelectorAll<HTMLButtonElement>("button"));
+    buttons.forEach((button) => {
+        button.disabled = true;
+    });
+    editCardMessage.textContent = "削除しています…";
+    try {
+        await requestJson<{ success: boolean }>(`/api/cards/${encodeURIComponent(card.id)}`, {
+            method: "DELETE",
+        });
+        currentCards = currentCards.filter((item) => item.id !== card.id);
+        pageBoard.querySelector(`.card[data-card-id="${card.id}"]`)?.remove();
+        renderCardTable();
+        cardEditor.close();
+        setAppMessage("作品を削除しました。");
+    } catch (error) {
+        editCardMessage.textContent = error instanceof Error
+            ? error.message
+            : "作品を削除できませんでした。";
+    } finally {
+        buttons.forEach((button) => {
+            button.disabled = false;
+        });
+    }
+});
+
+dismissCardEditorButton.addEventListener("click", () => cardEditor.close());
+cardEditor.addEventListener("close", () => {
+    editingCardId = null;
+});
+
 cardTableStatusFilter.addEventListener("change", renderCardTable);
 cardTableSearch.addEventListener("input", renderCardTable);
 cardTableTagFilters.addEventListener("change", renderCardTable);
@@ -1130,139 +969,6 @@ exportCsvButton.addEventListener("click", () => {
     URL.revokeObjectURL(link.href);
     setAppMessage(`${orderedCards.length}件をCSVにエクスポートしました。`);
 });
-
-openCsvImportButton.addEventListener("click", () => {
-    importFileInput.value = "";
-    csvHeaders = [];
-    csvRecords = [];
-    csvImportRows = [];
-    importColumnMapping.replaceChildren();
-    importColumnMapping.hidden = true;
-    importPreview.replaceChildren();
-    importMessage.textContent = "ファイルを選ぶと、列の対応付けとプレビューが表示されます。Laya候補は行ごと、または全行まとめて取得できます。";
-    submitImportButton.disabled = true;
-    importDialog.showModal();
-});
-
-importFileInput.addEventListener("change", async () => {
-    const file = importFileInput.files?.[0];
-    if (!file) {
-        return;
-    }
-    if (file.size > 1024 * 1024) {
-        importMessage.textContent = "CSVファイルは1MB以下にしてください。";
-        importFileInput.value = "";
-        return;
-    }
-    importMessage.textContent = "CSVを読み込んでいます…";
-    try {
-        const records = parseCsv(await file.text());
-        csvHeaders = records[0] ?? [];
-        csvRecords = records.slice(1);
-        buildCsvColumnMapping();
-        mapCsvRecords();
-    } catch (error) {
-        csvHeaders = [];
-        csvRecords = [];
-        csvImportRows = [];
-        importColumnMapping.hidden = true;
-        importPreview.replaceChildren();
-        submitImportButton.disabled = true;
-        importMessage.textContent = error instanceof Error ? error.message : "CSVを読み込めませんでした。";
-    }
-});
-
-importColumnMapping.addEventListener("change", mapCsvRecords);
-importPreview.addEventListener("change", (event: Event) => {
-    const target = event.target;
-    if (!(target instanceof Element)) {
-        return;
-    }
-    updateCsvRowFromEvent(target);
-});
-importPreview.addEventListener("click", (event: MouseEvent) => {
-    const target = event.target;
-    if (!(target instanceof Element)) {
-        return;
-    }
-    const button = target.closest<HTMLButtonElement>("button[data-csv-suggest]");
-    if (!button) {
-        return;
-    }
-    if (isBulkSuggesting) {
-        return;
-    }
-    const index = Number(button.dataset.csvSuggest);
-    const row = csvImportRows[index];
-    if (row) {
-        void requestCsvSuggestions(row);
-    }
-});
-
-suggestAllRowsButton.addEventListener("click", async () => {
-    const knownTitles = new Set(currentCards.map((card) => card.title));
-    const rows = csvImportRows.filter((row) => {
-        const isDuplicate = !row.title || knownTitles.has(row.title);
-        if (row.title) {
-            knownTitles.add(row.title);
-        }
-        return row.include && !isDuplicate;
-    });
-    if (rows.length === 0) {
-        importMessage.textContent = "候補を取得できる行がありません。";
-        return;
-    }
-
-    isBulkSuggesting = true;
-    suggestAllRowsButton.disabled = true;
-    renderCsvPreview();
-    let succeeded = 0;
-    try {
-        for (const [index, row] of rows.entries()) {
-            importMessage.textContent = `Layaで個別解析中… ${index + 1} / ${rows.length} 件`;
-            if (await requestCsvSuggestions(row)) {
-                succeeded += 1;
-            }
-        }
-        importMessage.textContent =
-            `${rows.length}件を個別に解析しました。${succeeded}件に候補を反映しました。内容を確認してください。`;
-    } finally {
-        isBulkSuggesting = false;
-        suggestAllRowsButton.disabled = false;
-        renderCsvPreview();
-    }
-});
-
-submitImportButton.addEventListener("click", async () => {
-    const cards = csvImportRows
-        .filter((row) => row.include && row.title)
-        .map((row) => ({ title: row.title, status: row.status, tags: row.tags }));
-    if (cards.length === 0) {
-        importMessage.textContent = "インポートする行を選択してください。";
-        return;
-    }
-    if (cards.some((card) => card.title.length > 100 || card.tags.length === 0)) {
-        importMessage.textContent = "タイトルは100文字以内、タグは1つ以上選択してください。";
-        return;
-    }
-    submitImportButton.disabled = true;
-    importMessage.textContent = "カードを保存しています…";
-    try {
-        const result = await requestJson<{ imported: number; skipped: number }>("/api/cards/import", {
-            method: "POST",
-            body: JSON.stringify({ cards }),
-        });
-        await loadBoard();
-        importDialog.close();
-        setAppMessage(`${result.imported}件をインポートしました。重複のため${result.skipped}件をスキップしました。`);
-    } catch (error) {
-        importMessage.textContent = error instanceof Error ? error.message : "カードをインポートできませんでした。";
-    } finally {
-        submitImportButton.disabled = false;
-    }
-});
-
-dismissImportButton.addEventListener("click", () => importDialog.close());
 
 document.addEventListener("click", (event: MouseEvent) => {
     const target = event.target;

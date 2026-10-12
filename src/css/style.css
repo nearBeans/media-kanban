@@ -87,6 +87,33 @@ body {
     background: #344a27;
 }
 
+.view-switch {
+    position: fixed;
+    right: calc(20px + env(safe-area-inset-right));
+    bottom: calc(20px + env(safe-area-inset-bottom));
+    z-index: 10;
+    display: flex;
+    gap: 10px;
+}
+
+.view-switch button {
+    display: grid;
+    width: 54px;
+    height: 54px;
+    min-height: 54px;
+    padding: 0;
+    place-items: center;
+    border-radius: 50%;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
+    font-size: 0.9rem;
+    font-weight: 600;
+}
+
+.view-switch button:focus-visible {
+    outline: 2px solid #fff;
+    outline-offset: 3px;
+}
+
 .auth-panel > a,
 .auth-links a {
     display: block;
@@ -168,108 +195,6 @@ body {
     margin: 8px 0 0 auto;
 }
 
-.csv-import-dialog {
-    width: min(calc(100% - 24px), 960px);
-    max-height: min(90vh, 900px);
-    overflow: auto;
-}
-
-.csv-import-dialog > label,
-.csv-column-mapping label {
-    display: grid;
-    gap: 6px;
-    min-width: 0;
-}
-
-.csv-import-dialog input,
-.csv-import-dialog select,
-.csv-import-dialog button {
-    min-height: 42px;
-    padding: 8px 12px;
-    border: 1px solid rgba(255, 255, 255, 0.25);
-    border-radius: 8px;
-    background: #1d1d1d;
-    color: #fff;
-    font: inherit;
-}
-
-.csv-import-dialog button {
-    cursor: pointer;
-}
-
-.csv-import-dialog button:disabled {
-    cursor: not-allowed;
-    opacity: 0.55;
-}
-
-.csv-column-mapping {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
-    gap: 12px;
-    margin: 16px 0;
-}
-
-.csv-import-actions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 10px;
-    margin: 12px 0;
-}
-
-.csv-preview {
-    max-height: 50vh;
-    margin: 12px 0;
-    overflow: auto;
-}
-
-.csv-preview table {
-    width: 100%;
-    border-collapse: collapse;
-    text-align: left;
-}
-
-.csv-preview th,
-.csv-preview td {
-    min-width: 120px;
-    padding: 8px;
-    border-bottom: 1px solid #555;
-    vertical-align: top;
-}
-
-.csv-preview td:first-child {
-    min-width: 180px;
-}
-
-.csv-preview .csv-source-data {
-    max-width: 320px;
-    white-space: pre-wrap;
-    overflow-wrap: anywhere;
-}
-
-.csv-preview input[type="text"],
-.csv-preview select {
-    width: 100%;
-    min-width: 110px;
-}
-
-.csv-preview .csv-tags {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 4px 10px;
-}
-
-.csv-preview .csv-tags label,
-.csv-preview .csv-include {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    white-space: nowrap;
-}
-
-.csv-preview .csv-duplicate {
-    color: #ffcf8b;
-}
-
 .recovery-code-panel > button {
     width: 100%;
 }
@@ -287,6 +212,100 @@ body {
 .recovery-email-confirmed-dialog button {
     display: block;
     margin: 0 0 0 auto;
+}
+
+.card-editor-dialog {
+    width: min(calc(100% - 32px), 520px);
+    max-height: min(85vh, 720px);
+    margin: auto;
+    padding: 24px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 14px;
+    background: #252525;
+    color: #fff;
+}
+
+.card-editor-dialog::backdrop {
+    background: rgba(0, 0, 0, 0.72);
+}
+
+.card-editor-dialog form {
+    display: grid;
+    gap: 14px;
+}
+
+.card-editor-dialog h2,
+.card-editor-dialog p {
+    margin: 0;
+}
+
+.card-editor-dialog p {
+    min-height: 1.4em;
+    color: #ffcf8b;
+}
+
+.card-editor-dialog form > label {
+    display: grid;
+    gap: 6px;
+}
+
+.card-editor-dialog input[type="text"],
+.card-editor-dialog select {
+    min-height: 42px;
+    padding: 8px 12px;
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    border-radius: 8px;
+    background: #1d1d1d;
+    color: #fff;
+    font: inherit;
+}
+
+.card-editor-dialog fieldset {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 16px;
+    padding: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 8px;
+}
+
+.card-editor-dialog fieldset label {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.card-editor-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.card-editor-dialog button,
+.table-edit-button {
+    min-height: 40px;
+    padding: 8px 12px;
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    border-radius: 8px;
+    background: #363636;
+    color: #fff;
+    font: inherit;
+    cursor: pointer;
+}
+
+.card-editor-dialog button:hover,
+.table-edit-button:hover {
+    background: #486a32;
+}
+
+.card-editor-dialog .delete-card-button {
+    margin-left: auto;
+    border-color: #a95050;
+    background: #572b2b;
+}
+
+.card-editor-dialog .delete-card-button:hover {
+    background: #793737;
 }
 
 .account-bar {
@@ -468,6 +487,17 @@ body {
     overflow-wrap: anywhere;
 }
 
+.table-scroll tbody .table-edit-cell {
+    width: 1%;
+    white-space: nowrap;
+}
+
+.table-edit-button {
+    min-height: 36px;
+    padding: 6px 10px;
+    font-size: 0.9rem;
+}
+
 .table-scroll tbody td {
     color: #ddd;
 }
@@ -526,6 +556,12 @@ h1 {
     border-radius: 12px;
     box-shadow: 2px 2px 10px #00000020;
     transition: transform 0.2s ease, box-shadow 0.2s ease;
+    cursor: pointer;
+}
+
+.card:focus-visible {
+    outline: 3px solid #486a32;
+    outline-offset: 2px;
 }
 
 .card-status-select {

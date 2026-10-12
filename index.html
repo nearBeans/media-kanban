@@ -70,29 +70,13 @@
     <header id="account-bar" class="account-bar" hidden>
         <span id="account-name"></span>
         <span id="app-message" role="status" aria-live="polite"></span>
-        <button id="show-kanban" type="button" aria-pressed="true">カンバン</button>
-        <button id="show-table" type="button" aria-pressed="false">表形式</button>
+        <div class="view-switch">
+            <button id="toggle-view" type="button" aria-label="表形式に切り替え" title="表形式に切り替え">表</button>
+        </div>
         <button id="export-csv" type="button">CSVエクスポート</button>
-        <button id="open-import-csv" type="button">CSVインポート</button>
         <button id="manage-recovery-email" type="button">復旧設定</button>
         <button id="sign-out" type="button">ログアウト</button>
     </header>
-    <dialog id="csv-import-dialog" class="recovery-dialog csv-import-dialog">
-        <h2>CSVインポート</h2>
-        <p>ヘッダー付きCSVを選び、列を対応付けてください。最大1MB・100行までです。Laya候補を取得すると、未対応列も含む行全体が1行ずつLayaへ送信されます。</p>
-        <label>
-            CSVファイル
-            <input id="csv-file" type="file" accept=".csv,text/csv">
-        </label>
-        <div id="csv-column-mapping" class="csv-column-mapping" hidden></div>
-        <p id="csv-import-message" role="status" aria-live="polite">ファイルを選ぶと、列の対応付けとプレビューが表示されます。Laya候補は行ごと、または全行まとめて取得できます。</p>
-        <div class="csv-import-actions">
-            <button id="suggest-all-csv-rows" type="button" disabled>Layaで全行を個別解析</button>
-            <button id="submit-csv-import" type="button" disabled>確認した行をインポート</button>
-        </div>
-        <div id="csv-preview" class="csv-preview"></div>
-        <button id="close-csv-import" type="button">閉じる</button>
-    </dialog>
     <dialog id="recovery-dialog" class="recovery-dialog">
         <h2>アカウント復旧設定</h2>
         <p id="recovery-dialog-message" role="status" aria-live="polite"></p>
@@ -105,12 +89,42 @@
             <button type="submit">確認メールを送信／再送</button>
         </form>
         <button id="confirm-recovery-email" type="button" hidden>メールアドレスを確認する</button>
-        <p>確認済みのメールアドレスに、一度だけ使える復旧コードをメール送信します。コードは20分で期限切れになります。</p>
         <button id="close-recovery-dialog" type="button">閉じる</button>
     </dialog>
     <dialog id="recovery-email-confirmed-dialog" class="recovery-dialog recovery-email-confirmed-dialog">
         <p id="recovery-email-confirmed-message"></p>
         <button id="close-recovery-email-confirmed" type="button">閉じる</button>
+    </dialog>
+    <dialog id="card-editor-dialog" class="card-editor-dialog" aria-labelledby="card-editor-heading">
+        <form id="card-editor-form">
+            <h2 id="card-editor-heading">作品を編集</h2>
+            <p id="card-editor-message" role="status" aria-live="polite"></p>
+            <label>
+                タイトル
+                <input id="card-editor-title" name="title" type="text" maxlength="100" required>
+            </label>
+            <label>
+                状態
+                <select id="card-editor-status" name="status" required>
+                    <option value="yet">未視聴・未読</option>
+                    <option value="now">視聴中・読書中</option>
+                    <option value="done">完結・読了</option>
+                    <option value="stop">断念</option>
+                </select>
+            </label>
+            <fieldset id="card-editor-tags">
+                <legend>メディアタイプ（複数選択可）</legend>
+                <label><input type="checkbox" name="tags" value="マンガ">マンガ</label>
+                <label><input type="checkbox" name="tags" value="アニメ">アニメ</label>
+                <label><input type="checkbox" name="tags" value="ラノベ">ラノベ</label>
+                <label><input type="checkbox" name="tags" value="ゲーム">ゲーム</label>
+            </fieldset>
+            <div class="card-editor-actions">
+                <button type="submit">保存</button>
+                <button id="delete-card" type="button" class="delete-card-button">削除</button>
+                <button id="close-card-editor" type="button">閉じる</button>
+            </div>
+        </form>
     </dialog>
     <p class="mobile-board-hint" hidden>列は左右にスワイプして切り替えられます</p>
     <main class="kanban-board" aria-label="カンバンボード" hidden>
@@ -171,9 +185,10 @@
             <table>
                 <thead>
                     <tr>
-                        <th scope="col">タイトル</th>
-                        <th scope="col">状態</th>
-                        <th scope="col">タグ</th>
+                    <th scope="col">編集</th>
+                    <th scope="col">タイトル</th>
+                    <th scope="col">状態</th>
+                    <th scope="col">タグ</th>
                     </tr>
                 </thead>
                 <tbody id="table-rows"></tbody>

@@ -16,7 +16,7 @@ npx wrangler secret put INITIAL_SETUP_CODE
 # Create a sending-only API key in Resend, restricted to the verified medikan.mofh.dev domain.
 npx wrangler secret put RESEND_API_KEY
 
-# Create a Laya API key and keep it server-side for optional CSV import suggestions.
+# Create a Laya API key and keep it server-side for CSV row analysis.
 npx wrangler secret put LAYA_API_KEY
 ```
 
@@ -31,7 +31,7 @@ RESEND_API_KEY=replace-with-your-resend-api-key
 LAYA_API_KEY=replace-with-your-laya-api-key
 ```
 
-The Laya key is used only by the authenticated Worker proxy for explicit status/tag suggestions during CSV import. It is never sent to the browser. When requested, the proxy sends the full selected CSV row, including columns not mapped to Media Kanban fields, to Laya for each individual suggestion. CSV import/export remains usable without the key; if suggestions are unavailable, set the status and tags manually. Configure the key locally in the ignored `.dev.vars` file and in production with `npx wrangler secret put LAYA_API_KEY`.
+The Laya key is used only by the authenticated Worker proxy during CSV import. It is never sent to the browser. For each non-empty work row, the proxy sends the title and every CSV column to Laya and requests a progress status and media-type classification. The editor can review or change those suggestions before importing. CSV import/export remains usable without the key; if analysis is unavailable, set the status and media type manually. Configure the key locally in the ignored `.dev.vars` file and in production with `npx wrangler secret put LAYA_API_KEY`.
 
 ## Database and deployment
 
