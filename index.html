@@ -99,31 +99,41 @@
         <form id="card-editor-form">
             <h2 id="card-editor-heading">作品を編集</h2>
             <p id="card-editor-message" role="status" aria-live="polite"></p>
-            <label>
-                タイトル
-                <input id="card-editor-title" name="title" type="text" maxlength="100" required>
-            </label>
-            <label>
-                状態
-                <select id="card-editor-status" name="status" required>
-                    <option value="yet">未視聴・未読</option>
-                    <option value="now">視聴中・読書中</option>
-                    <option value="done">完結・読了</option>
-                    <option value="stop">断念</option>
-                </select>
-            </label>
-            <fieldset id="card-editor-tags">
-                <legend>メディアタイプ（複数選択可）</legend>
-                <label><input type="checkbox" name="tags" value="マンガ">マンガ</label>
-                <label><input type="checkbox" name="tags" value="アニメ">アニメ</label>
-                <label><input type="checkbox" name="tags" value="ラノベ">ラノベ</label>
-                <label><input type="checkbox" name="tags" value="ゲーム">ゲーム</label>
-            </fieldset>
-            <div class="card-editor-actions">
+            <div id="card-editor-fields" class="card-editor-fields">
+                <label>
+                    タイトル
+                    <input id="card-editor-title" name="title" type="text" maxlength="100" required>
+                </label>
+                <label>
+                    状態
+                    <select id="card-editor-status" name="status" required>
+                        <option value="yet">未視聴・未読</option>
+                        <option value="now">視聴中・読書中</option>
+                        <option value="done">完結・読了</option>
+                        <option value="stop">断念</option>
+                    </select>
+                </label>
+                <fieldset id="card-editor-tags">
+                    <legend>メディアタイプ（複数選択可）</legend>
+                    <label><input type="checkbox" name="tags" value="マンガ">マンガ</label>
+                    <label><input type="checkbox" name="tags" value="アニメ">アニメ</label>
+                    <label><input type="checkbox" name="tags" value="ラノベ">ラノベ</label>
+                    <label><input type="checkbox" name="tags" value="ゲーム">ゲーム</label>
+                </fieldset>
+            </div>
+            <div id="card-editor-actions" class="card-editor-actions">
                 <button type="submit">保存</button>
                 <button id="delete-card" type="button" class="delete-card-button">削除</button>
                 <button id="close-card-editor" type="button">閉じる</button>
             </div>
+            <section id="card-delete-confirmation" class="card-delete-confirmation" aria-labelledby="card-delete-heading" hidden>
+                <h3 id="card-delete-heading">作品を削除しますか？</h3>
+                <p>「<strong id="card-delete-title"></strong>」を削除します。この操作は取り消せません。</p>
+                <div class="card-editor-actions">
+                    <button id="confirm-delete-card" type="button" class="delete-card-button">削除する</button>
+                    <button id="cancel-delete-card" type="button">キャンセル</button>
+                </div>
+            </section>
         </form>
     </dialog>
     <p class="mobile-board-hint" hidden>列は左右にスワイプして切り替えられます</p>

@@ -28,11 +28,17 @@ const tableResultCount = document.querySelector<HTMLOutputElement>("#table-resul
 const tableRows = document.querySelector<HTMLTableSectionElement>("#table-rows");
 const cardEditorDialog = document.querySelector<HTMLDialogElement>("#card-editor-dialog");
 const cardEditorForm = document.querySelector<HTMLFormElement>("#card-editor-form");
+const cardEditorFields = document.querySelector<HTMLElement>("#card-editor-fields");
+const cardEditorActions = document.querySelector<HTMLElement>("#card-editor-actions");
 const cardEditorTitle = document.querySelector<HTMLInputElement>("#card-editor-title");
 const cardEditorStatus = document.querySelector<HTMLSelectElement>("#card-editor-status");
 const cardEditorTags = document.querySelector<HTMLElement>("#card-editor-tags");
 const cardEditorMessage = document.querySelector<HTMLElement>("#card-editor-message");
 const deleteCardButton = document.querySelector<HTMLButtonElement>("#delete-card");
+const cardDeleteConfirmation = document.querySelector<HTMLElement>("#card-delete-confirmation");
+const cardDeleteTitle = document.querySelector<HTMLElement>("#card-delete-title");
+const confirmDeleteCardButton = document.querySelector<HTMLButtonElement>("#confirm-delete-card");
+const cancelDeleteCardButton = document.querySelector<HTMLButtonElement>("#cancel-delete-card");
 const closeCardEditorButton = document.querySelector<HTMLButtonElement>("#close-card-editor");
 const manageRecoveryEmailButton = document.querySelector<HTMLButtonElement>("#manage-recovery-email");
 const recoveryDialog = document.querySelector<HTMLDialogElement>("#recovery-dialog");
@@ -70,6 +76,21 @@ function isCardMediaType(value: string): value is CardMediaType {
     return tagOptions.some((tag) => tag === value);
 }
 
+function getTagTone(tag: string): string {
+    switch (tag) {
+        case "マンガ":
+            return "manga";
+        case "アニメ":
+            return "anime";
+        case "ラノベ":
+            return "novel";
+        case "ゲーム":
+            return "game";
+        default:
+            return "default";
+    }
+}
+
 interface CardData {
     id: string;
     title: string;
@@ -91,8 +112,10 @@ if (!board || !authPanel || !authMessage || !recoveryRequestPanel || !recoveryRe
     !accountBar || !accountName || !signOutButton || !manageRecoveryEmailButton || !recoveryDialog ||
     !toggleViewButton || !tableView || !tableStatusFilter || !tableSearch ||
     !tableTagFilters || !clearTableFiltersButton || !tableResultCount || !tableRows ||
-    !cardEditorDialog || !cardEditorForm || !cardEditorTitle || !cardEditorStatus ||
-    !cardEditorTags || !cardEditorMessage || !deleteCardButton || !closeCardEditorButton ||
+    !cardEditorDialog || !cardEditorForm || !cardEditorFields || !cardEditorActions ||
+    !cardEditorTitle || !cardEditorStatus || !cardEditorTags || !cardEditorMessage ||
+    !deleteCardButton || !cardDeleteConfirmation || !cardDeleteTitle ||
+    !confirmDeleteCardButton || !cancelDeleteCardButton || !closeCardEditorButton ||
     !recoveryDialogMessage || !recoveryEmailStatus || !recoveryEmailForm ||
     !confirmRecoveryEmailButton || !closeRecoveryDialogButton || !recoveryEmailConfirmedDialog ||
     !recoveryEmailConfirmedMessage || !closeRecoveryEmailConfirmedButton || !appMessage || !mobileBoardHint ||
@@ -125,11 +148,17 @@ const cardTableResultCount = tableResultCount;
 const cardTableRows = tableRows;
 const cardEditor = cardEditorDialog;
 const editCardForm = cardEditorForm;
+const editCardFields = cardEditorFields;
+const editCardActions = cardEditorActions;
 const editCardTitle = cardEditorTitle;
 const editCardStatus = cardEditorStatus;
 const editCardTags = cardEditorTags;
 const editCardMessage = cardEditorMessage;
 const removeCardButton = deleteCardButton;
+const deleteConfirmation = cardDeleteConfirmation;
+const deleteConfirmationTitle = cardDeleteTitle;
+const confirmDeleteButton = confirmDeleteCardButton;
+const cancelDeleteButton = cancelDeleteCardButton;
 const dismissCardEditorButton = closeCardEditorButton;
 const openRecoveryDialogButton = manageRecoveryEmailButton;
 const recoveryCodeModal = recoveryDialog;
@@ -177,8 +206,8 @@ function setAuthMessage(message: string): void {
     liveAuthMessage.textContent = message;
 }
 
-function setAppMessage(message: string): void {
-    appStatus.textContent = message;
+function setAppMessage(_message: string): void {
+    appStatus.textContent = "";
 }
 
 function setBoardView(view: BoardView): void {
@@ -253,7 +282,7 @@ function createCard(id: string, title: string, tags: string[], status: CardStatu
 
     for (const tag of tags) {
         const tagElement = document.createElement("span");
-        tagElement.className = "tag";
+        tagElement.className = `tag ${getTagTone(tag)}`;
         tagElement.textContent = tag;
         card.append(tagElement);
     }
@@ -315,7 +344,7 @@ function renderCardTable(): void {
         } else {
             for (const tag of card.tags) {
                 const badge = document.createElement("span");
-                badge.className = "table-tag";
+                badge.className = `table-tag ${getTagTone(tag)}`;
                 badge.textContent = tag;
                 tagsCell.append(badge);
             }
@@ -353,6 +382,9 @@ function openCardEditor(cardId: string): void {
     editCardTags.querySelectorAll<HTMLInputElement>('input[name="tags"]').forEach((checkbox) => {
         checkbox.checked = card.tags.includes(checkbox.value);
     });
+    editCardFields.hidden = false;
+    editCardActions.hidden = false;
+    deleteConfirmation.hidden = true;
     editCardMessage.textContent = "";
     cardEditor.showModal();
     editCardTitle.focus();
@@ -375,6 +407,28 @@ function renderUpdatedBoardCard(card: CardData): void {
     }
 }
 
+function renderBoardCards(cards: CardData[]): void {
+    for (const status of cardStatusOrder) {
+        const section = pageBoard.querySelector<HTMLElement>(`section[data-status="${status}"]`);
+        if (!section) {
+            throw new Error(`The "${status}" column was not found.`);
+        }
+        section.hidden = false;
+        section.querySelectorAll(".card").forEach((card) => card.remove());
+        const addArea = section.querySelector<HTMLElement>(".add-card-area");
+        if (!addArea) {
+            throw new Error(`The add-card area for "${status}" was not found.`);
+        }
+        cards
+            .filter((card) => card.status === status)
+            .sort((left, right) => left.position - right.position)
+            .forEach((card) => section.insertBefore(
+                createCard(card.id, card.title, card.tags, card.status),
+                addArea,
+            ));
+    }
+}
+
 async function loadBoard(): Promise<void> {
     const result = await requestJson<CardsResponse>("/api/cards");
     currentCards = result.cards;
@@ -388,26 +442,7 @@ async function loadBoard(): Promise<void> {
     userName.textContent = result.user.name;
     setAppMessage("");
     setBoardView("kanban");
-
-    for (const status of cardStatusOrder) {
-        const section = pageBoard.querySelector<HTMLElement>(`section[data-status="${status}"]`);
-        if (!section) {
-            throw new Error(`The "${status}" column was not found.`);
-        }
-        section.hidden = false;
-        section.querySelectorAll(".card").forEach((card) => card.remove());
-        const addArea = section.querySelector<HTMLElement>(".add-card-area");
-        if (!addArea) {
-            throw new Error(`The add-card area for "${status}" was not found.`);
-        }
-        result.cards
-            .filter((card) => card.status === status)
-            .sort((left, right) => left.position - right.position)
-            .forEach((card) => section.insertBefore(
-                createCard(card.id, card.title, card.tags, card.status),
-                addArea,
-            ));
-    }
+    renderBoardCards(result.cards);
 }
 
 async function checkAuthentication(): Promise<void> {
@@ -645,7 +680,7 @@ pageBoard.addEventListener("change", (event: Event) => {
 
     destination.insertBefore(card, addArea);
     void saveCardOrder().then(() => {
-        setAppMessage(`「${cardStatusLabels[destinationStatus]}」へ移動しました。`);
+        setAppMessage("");
         destination.scrollIntoView({
             behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth",
             block: "nearest",
@@ -897,7 +932,7 @@ editCardForm.addEventListener("submit", async (event: SubmitEvent) => {
     }
 });
 
-removeCardButton.addEventListener("click", async () => {
+removeCardButton.addEventListener("click", () => {
     if (!editingCardId) {
         throw new Error("No card is selected for deletion.");
     }
@@ -905,7 +940,32 @@ removeCardButton.addEventListener("click", async () => {
     if (!card) {
         throw new Error("The selected card could not be found.");
     }
-    if (!window.confirm(`「${card.title}」を削除します。この操作は取り消せません。`)) {
+    deleteConfirmationTitle.textContent = card.title;
+    editCardFields.hidden = true;
+    editCardActions.hidden = true;
+    deleteConfirmation.hidden = false;
+    editCardMessage.textContent = "";
+    confirmDeleteButton.focus();
+});
+
+cancelDeleteButton.addEventListener("click", () => {
+    deleteConfirmation.hidden = true;
+    editCardFields.hidden = false;
+    editCardActions.hidden = false;
+    editCardMessage.textContent = "";
+    removeCardButton.focus();
+});
+
+confirmDeleteButton.addEventListener("click", async () => {
+    if (!editingCardId) {
+        throw new Error("No card is selected for deletion.");
+    }
+    const card = currentCards.find((item) => item.id === editingCardId);
+    if (!card) {
+        throw new Error("The selected card could not be found.");
+    }
+
+    if (confirmDeleteButton.disabled) {
         return;
     }
 
@@ -914,29 +974,68 @@ removeCardButton.addEventListener("click", async () => {
         button.disabled = true;
     });
     editCardMessage.textContent = "削除しています…";
+    let deletionConfirmed = false;
+    let deletionReconciled = false;
     try {
-        await requestJson<{ success: boolean }>(`/api/cards/${encodeURIComponent(card.id)}`, {
-            method: "DELETE",
-        });
-        currentCards = currentCards.filter((item) => item.id !== card.id);
-        pageBoard.querySelector(`.card[data-card-id="${card.id}"]`)?.remove();
-        renderCardTable();
-        cardEditor.close();
-        setAppMessage("作品を削除しました。");
-    } catch (error) {
-        editCardMessage.textContent = error instanceof Error
-            ? error.message
-            : "作品を削除できませんでした。";
+        try {
+            await requestJson<{ success: boolean }>(`/api/cards/${encodeURIComponent(card.id)}`, {
+                method: "DELETE",
+            });
+            deletionConfirmed = true;
+        } catch (deleteError) {
+            let latest: CardsResponse;
+            try {
+                latest = await requestJson<CardsResponse>("/api/cards");
+            } catch (reconcileError) {
+                const details = reconcileError instanceof Error
+                    ? reconcileError.message
+                    : "削除状態を確認できませんでした。";
+                editCardMessage.textContent = `削除結果を確認できませんでした。画面を再読み込みして確認してください。(${details})`;
+                return;
+            }
+            currentCards = latest.cards;
+            renderBoardCards(latest.cards);
+            renderCardTable();
+            if (latest.cards.some((current) => current.id === card.id)) {
+                const details = deleteError instanceof Error
+                    ? deleteError.message
+                    : "削除リクエストに失敗しました。";
+                editCardMessage.textContent = `作品を削除できませんでした。作品は一覧に残っています。(${details})`;
+                return;
+            }
+            deletionConfirmed = true;
+            deletionReconciled = true;
+        }
+
+        if (deletionConfirmed) {
+            currentCards = currentCards.filter((item) => item.id !== card.id);
+            pageBoard.querySelector(`.card[data-card-id="${card.id}"]`)?.remove();
+            renderCardTable();
+            cardEditor.close();
+            setAppMessage(deletionReconciled
+                ? "作品の削除済み状態を確認し、一覧を更新しました。"
+                : "作品を削除し、一覧を更新しました。");
+        }
     } finally {
         buttons.forEach((button) => {
             button.disabled = false;
         });
+        if (!cardEditor.open) {
+            return;
+        }
+        confirmDeleteButton.focus();
     }
 });
 
 dismissCardEditorButton.addEventListener("click", () => cardEditor.close());
 cardEditor.addEventListener("close", () => {
     editingCardId = null;
+    editCardFields.hidden = false;
+    editCardActions.hidden = false;
+    deleteConfirmation.hidden = true;
+    confirmDeleteButton.disabled = false;
+    cancelDeleteButton.disabled = false;
+    editCardMessage.textContent = "";
 });
 
 cardTableStatusFilter.addEventListener("change", renderCardTable);
